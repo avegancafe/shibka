@@ -64,7 +64,7 @@ newest version with no stale CSS/JS and no manual cache-busting.
 ## Breed progression
 
 Chihuahua → Pomeranian → Pug → Corgi → Beagle → French Bulldog → Dalmatian →
-Husky → Golden Retriever → Samoyed → **Shiba Inu** 🐕
+Husky → Jack Russell → Samoyed → **Shiba Inu** 🐕
 
 ## Project structure
 

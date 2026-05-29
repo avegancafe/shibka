@@ -15,7 +15,7 @@
     { level: 6,  name: "French Bulldog",   radius: 56, furColor: "#A9A29C", earColor: "#8C857F", muzzleColor: "#EAE5DF", earStyle: "round",  eyeStyle: "round",  marking: "patch",    scoreValue: 32 },
     { level: 7,  name: "Dalmatian",        radius: 64, furColor: "#FBFAF7", earColor: "#2B2B2B", muzzleColor: "#FBFAF7", earStyle: "floppy", eyeStyle: "happy",  marking: "spots",    scoreValue: 48 },
     { level: 8,  name: "Husky",            radius: 72, furColor: "#5B6168", earColor: "#3D4248", muzzleColor: "#F4F5F6", earStyle: "pointy", eyeStyle: "blue",   marking: "mask",     scoreValue: 70 },
-    { level: 9,  name: "Golden Retriever", radius: 80, furColor: "#E6B25E", earColor: "#CE9543", muzzleColor: "#F3DDAE", earStyle: "floppy", eyeStyle: "happy",  marking: "none",     scoreValue: 100 },
+    { level: 9,  name: "Jack Russell",     radius: 80, furColor: "#F5EFE3", earColor: "#A9692F", muzzleColor: "#FFFFFF", earStyle: "floppy", eyeStyle: "round",  marking: "patch",    scoreValue: 100 },
     { level: 10, name: "Samoyed",          radius: 86, furColor: "#F4EFE4", earColor: "#E1D7C6", muzzleColor: "#FFFFFF", earStyle: "pointy", eyeStyle: "round",  marking: "none",     smile: true, scoreValue: 150 },
     { level: 11, name: "Shiba Inu",        radius: 92, furColor: "#2B2723", earColor: "#211D1A", muzzleColor: "#F3EADA", browColor: "#C77A3A", eyeRing: "#EEE1CB", earStyle: "pointy", eyeStyle: "round",  marking: "eyebrows", smile: true, scoreValue: 256 },
   ];
