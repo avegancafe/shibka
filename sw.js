@@ -1,18 +1,22 @@
-// Shibka service worker — makes the game installable and fully playable offline.
+// Shibka service worker — installable + always-fresh, with offline fallback.
 //
-// Strategy:
-//   • install  → precache the whole app shell (so first offline load works)
-//   • navigate → network-first (online users always get the latest HTML),
-//                falling back to the cached shell when offline
-//   • assets   → stale-while-revalidate (instant from cache, refreshed in the
-//                background), so updates land within one reload
+// Philosophy: the installed app should behave like a *live* copy of the latest
+// deploy. So this is NETWORK-FIRST for everything — every online request goes
+// to the network and returns the newest file, while the cache is kept only as
+// an offline fallback (the last build you successfully loaded). There is no
+// stale-asset window: asset fetches use `no-cache` so they revalidate past any
+// CDN max-age, and the worker itself auto-updates (see the registration in
+// index.html: updateViaCache "none" + update() + skipWaiting + a reload on
+// controllerchange).
 //
-// Bump VERSION whenever you want to force every client to drop old caches.
-const VERSION = "v8";
+// VERSION only controls the *offline snapshot* cache name; bump it if you change
+// the ASSETS list or want to force-evict old caches. Day-to-day content updates
+// flow automatically without touching it.
+const VERSION = "v9";
 const CACHE = "shibka-" + VERSION;
 
-// Relative URLs so this works both at the domain root (localhost) and under a
-// subpath (e.g. GitHub Pages /shibka/). They resolve against the SW's scope.
+// Relative URLs so this works at the domain root (localhost) and under a
+// subpath (GitHub Pages /shibka/). They resolve against the worker's scope.
 const ASSETS = [
   "./",
   "./index.html",
@@ -31,13 +35,18 @@ const ASSETS = [
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE)
+      // `reload` bypasses the HTTP cache so the precached snapshot is fresh.
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys()
+    caches
+      .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
@@ -48,35 +57,30 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // leave cross-origin requests alone
+  if (url.origin !== self.location.origin) return; // leave cross-origin alone
 
-  // HTML / navigations: network-first, fall back to the cached shell offline.
-  if (req.mode === "navigate") {
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put("./index.html", copy));
-          return res;
-        })
-        .catch(() => caches.match("./index.html", { ignoreSearch: true }))
-    );
-    return;
-  }
+  const isNav = req.mode === "navigate";
 
-  // Everything else: stale-while-revalidate.
+  // Network-first. Navigations fetch the request as-is (browsers don't reuse the
+  // HTTP cache for documents); other assets revalidate with `no-cache` so we
+  // never serve a stale CSS/JS while online.
+  const fromNetwork = isNav ? fetch(req) : fetch(req, { cache: "no-cache" });
+
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.status === 200 && res.type === "basic") {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
-          }
-          return res;
+    fromNetwork
+      .then((res) => {
+        if (res && res.status === 200 && res.type === "basic") {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(req, { ignoreSearch: true }).then((cached) => {
+          if (cached) return cached;
+          if (isNav) return caches.match("./index.html", { ignoreSearch: true });
+          return Response.error();
         })
-        .catch(() => cached);
-      return cached || network;
-    })
+      )
   );
 });

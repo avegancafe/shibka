@@ -38,9 +38,14 @@ no connection:
 3. Launch it from the home-screen icon — it opens full-screen (no browser chrome)
    and works **completely offline**.
 
-A service worker (`sw.js`) precaches the whole app shell on first visit; the web
-app manifest (`manifest.webmanifest`) provides the Shiba icon and standalone
-display. When you're online it still fetches the latest version.
+A service worker (`sw.js`) precaches the whole app shell on first visit so it
+works offline; the web app manifest (`manifest.webmanifest`) provides the Shiba
+icon and standalone display.
+
+The worker is **network-first**: whenever you're online it loads the latest
+deployed build (the cache is only a fallback for when you're offline), and it
+auto-updates itself on every visit — so the installed PWA always reflects the
+newest version with no stale CSS/JS and no manual cache-busting.
 
 ## How to play
 

@@ -88,10 +88,29 @@
   <script src="js/game.js?v=8"></script>
 
   <script>
-    // Register the service worker for offline play + home-screen install.
+    // Register the service worker for offline play + home-screen install, and
+    // keep it self-updating so the app is always the latest deploy.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("sw.js").catch(function () {});
+        // Whether a worker already controlled this page when it loaded. If so, a
+        // later controllerchange means a NEW version took over -> reload once to
+        // run it. (On the very first visit there's no prior controller, so we
+        // don't reload on the initial claim.)
+        var hadController = !!navigator.serviceWorker.controller;
+        var refreshing = false;
+        navigator.serviceWorker.addEventListener("controllerchange", function () {
+          if (refreshing || !hadController) return;
+          refreshing = true;
+          window.location.reload();
+        });
+
+        navigator.serviceWorker
+          .register("sw.js", { updateViaCache: "none" })
+          .then(function (reg) {
+            // Check for a new worker every time the page is opened.
+            reg.update();
+          })
+          .catch(function () {});
       });
     }
   </script>
