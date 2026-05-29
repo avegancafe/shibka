@@ -1,6 +1,8 @@
 # Shibka 🐾
 
-![Shibka — a dog-breed take on the Suika watermelon merge game](assets/social-preview.png)
+![Shibka — all roads lead to Shiba](assets/social-preview.png)
+
+> **All roads lead to Shiba.**
 
 A cute, physics-based **merge puzzle** — a fan reskin of the Suika / Watermelon
 game, but with **dog breeds** instead of fruit. Drop pups into the bin; when two
