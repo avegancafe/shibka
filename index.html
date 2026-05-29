@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Shibka — Dog Merge Game</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <h1 class="logo">Shibka <span class="paw">🐾</span></h1>
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Score</span>
+          <span class="stat-value" id="score">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Best</span>
+          <span class="stat-value" id="best">0</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="play-wrap">
+      <canvas id="game-canvas"></canvas>
+
+      <div id="game-over" class="overlay hidden">
+        <div class="overlay-card">
+          <h2>Good dog!</h2>
+          <p>Final score</p>
+          <div class="final" id="final-score">0</div>
+          <button id="restart-button" class="btn">Play again</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="bottombar">
+      <div class="next">
+        <span class="next-label">Next up</span>
+        <span id="next-dog" class="next-dog"></span>
+      </div>
+      <p class="hint">Move to aim · Click / Space / Tap to drop · Merge matching pups</p>
+
+      <section class="evolution">
+        <span class="evo-label">Dog Evolution</span>
+        <canvas id="evolution-ring"></canvas>
+      </section>
+    </footer>
+  </main>
+
+  <script src="vendor/matter.min.js"></script>
+  <script src="js/dogs.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

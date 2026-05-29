@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Node / tooling cruft (not used at runtime, but ignore if present)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Local test / QA artifacts
+.playwright-mcp/
+shibka-*.png
