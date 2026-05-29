@@ -1,5 +1,7 @@
 # Shibka 🐾
 
+![Shibka — a dog-breed take on the Suika watermelon merge game](assets/social-preview.png)
+
 A cute, physics-based **merge puzzle** — a fan reskin of the Suika / Watermelon
 game, but with **dog breeds** instead of fruit. Drop pups into the bin; when two
 of the same breed touch, they merge into the next breed up. Work your way from a
