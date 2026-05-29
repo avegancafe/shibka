@@ -8,7 +8,7 @@
 //                background), so updates land within one reload
 //
 // Bump VERSION whenever you want to force every client to drop old caches.
-const VERSION = "v7";
+const VERSION = "v8";
 const CACHE = "shibka-" + VERSION;
 
 // Relative URLs so this works both at the domain root (localhost) and under a
@@ -22,6 +22,7 @@ const ASSETS = [
   "./vendor/matter.min.js",
   "./manifest.webmanifest",
   "./assets/favicon.png",
+  "./assets/favicon-32.png",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
   "./assets/icon-512-maskable.png",

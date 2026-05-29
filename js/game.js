@@ -44,10 +44,12 @@
   function fitCanvas() {
     const aspect = W / H;
     const wide = window.innerWidth >= 860;
+    const banner = document.querySelector(".dedication");
+    const bh = banner ? banner.offsetHeight : 0; // dedication header eats some height
     let dispW, dispH;
     if (wide) {
       // desktop: board fills the height between the side panels
-      const availH = window.innerHeight - 48;
+      const availH = window.innerHeight - 48 - bh;
       const availW = window.innerWidth - 540; // room for left + right panels
       dispH = Math.max(420, availH);
       dispW = dispH * aspect;
@@ -56,7 +58,7 @@
       // mobile/narrow: fill the width (page scrolls for the panels below)
       dispW = Math.min(window.innerWidth - 24, 460);
       dispH = dispW / aspect;
-      const maxH = window.innerHeight - 150;
+      const maxH = window.innerHeight - 150 - bh;
       if (maxH > 380 && dispH > maxH) { dispH = maxH; dispW = dispH * aspect; }
     }
     canvas.style.width = dispW + "px";
