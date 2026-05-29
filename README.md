@@ -27,6 +27,21 @@ Everything runs **fully offline** — `matter-js` is vendored in `vendor/`, dog
 faces are drawn procedurally on a canvas, and the system font stack is used. No
 network requests at runtime.
 
+## Install it (offline-ready PWA)
+
+Shibka is a Progressive Web App, so you can keep it on your phone and play with
+no connection:
+
+1. Open <https://avegancafe.github.io/shibka/> in your phone's browser.
+2. **iOS (Safari):** Share → **Add to Home Screen**. **Android (Chrome):** menu →
+   **Install app** / **Add to Home screen**.
+3. Launch it from the home-screen icon — it opens full-screen (no browser chrome)
+   and works **completely offline**.
+
+A service worker (`sw.js`) precaches the whole app shell on first visit; the web
+app manifest (`manifest.webmanifest`) provides the Shiba icon and standalone
+display. When you're online it still fetches the latest version.
+
 ## How to play
 
 - **Move** your mouse / finger across the play area (or use **← →**) to aim the

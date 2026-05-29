@@ -7,6 +7,15 @@
   <meta name="description" content="All roads lead to Shiba — a dog-breed take on the Suika / Watermelon merge game." />
   <link rel="icon" type="image/png" href="assets/favicon.png" />
 
+  <!-- Progressive Web App -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#F2A03D" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Shibka" />
+
   <!-- Social preview (Open Graph + Twitter) -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Shibka — Dog Merge Game" />
@@ -21,7 +30,7 @@
   <meta name="twitter:description" content="All roads lead to Shiba — a dog-breed take on the Suika / Watermelon merge game." />
   <meta name="twitter:image" content="https://avegancafe.github.io/shibka/assets/social-preview.png" />
 
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=7" />
 </head>
 <body>
   <main class="app">
@@ -71,7 +80,16 @@
   </main>
 
   <script src="vendor/matter.min.js"></script>
-  <script src="js/dogs.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/dogs.js?v=7"></script>
+  <script src="js/game.js?v=7"></script>
+
+  <script>
+    // Register the service worker for offline play + home-screen install.
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () {});
+      });
+    }
+  </script>
 </body>
 </html>
