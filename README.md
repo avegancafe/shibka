@@ -40,7 +40,7 @@ network requests at runtime.
 ## Breed progression
 
 Chihuahua → Pomeranian → Pug → Corgi → Beagle → French Bulldog → Dalmatian →
-Husky → Golden Retriever → Akita → **Shiba Inu** 🐕
+Husky → Golden Retriever → Samoyed → **Shiba Inu** 🐕
 
 ## Project structure
 

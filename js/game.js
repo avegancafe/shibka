@@ -370,11 +370,15 @@
 
   // ---- dog evolution ring ---------------------------------------------------
   // A circular display of the full breed progression (Chihuahua → … → Shiba),
-  // echoing the original game's "Fruit Evolution" wheel. Static, drawn once.
-  function drawEvolutionRing() {
+  // echoing the original game's "Fruit Evolution" wheel. Each dog is hoverable /
+  // tappable to reveal its breed name (see the handlers further down).
+  const EVO_SIZE = 230;          // CSS px the ring canvas occupies
+  let evoHits = [];              // [{x, y, r, name, level}] in CSS px, for hit-testing
+  function drawEvolutionRing(highlight) {
+    if (highlight === undefined) highlight = -1;
     const cv = document.getElementById("evolution-ring");
     if (!cv) return;
-    const size = 230;
+    const size = EVO_SIZE;
     cv.width = Math.round(size * dpr);
     cv.height = Math.round(size * dpr);
     cv.style.width = size + "px";
@@ -395,6 +399,7 @@
     c.setLineDash([]);
 
     const n = LEVELS.length;
+    evoHits = [];
     for (let i = 0; i < n; i++) {
       const def = LEVELS[i];
       const ang = -Math.PI / 2 + (Math.PI * 2 * i) / n; // start at top, clockwise
@@ -403,8 +408,19 @@
       const sprite = DOGS.getSprite(def.level, dpr);
       // grow display size with level so the Shiba reads as the goal
       const displayDiam = 20 + (def.radius / 92) * 18; // ~20 .. 38 px
-      const drawSize = sprite.cssSize * (displayDiam / (def.radius * 2));
+      const hovered = i === highlight;
+      const scale = hovered ? 1.22 : 1;
+      const drawSize = sprite.cssSize * (displayDiam / (def.radius * 2)) * scale;
+
+      // soft highlight disc behind the hovered dog
+      if (hovered) {
+        c.fillStyle = "rgba(242,160,61,0.30)";
+        c.beginPath();
+        c.arc(x, y, displayDiam / 2 + 7, 0, Math.PI * 2);
+        c.fill();
+      }
       c.drawImage(sprite.canvas, x - drawSize / 2, y - drawSize / 2, drawSize, drawSize);
+      evoHits.push({ x, y, r: displayDiam / 2 + 5, name: def.name, level: def.level });
     }
 
     // center hint
@@ -414,6 +430,47 @@
     c.font = "700 13px -apple-system, BlinkMacSystemFont, sans-serif";
     c.fillText("Merge", cx, cy - 7);
     c.fillText("to evolve", cx, cy + 9);
+  }
+
+  // Hover / tap a dog in the ring to reveal its breed name in a small tooltip.
+  function setupEvolutionRing() {
+    const cv = document.getElementById("evolution-ring");
+    const tip = document.getElementById("evo-tip");
+    if (!cv || !tip) return;
+    let hover = -1;
+
+    function pick(clientX, clientY) {
+      const rect = cv.getBoundingClientRect();
+      const x = (clientX - rect.left) * (EVO_SIZE / rect.width);
+      const y = (clientY - rect.top) * (EVO_SIZE / rect.height);
+      for (let i = 0; i < evoHits.length; i++) {
+        const h = evoHits[i];
+        if (Math.hypot(x - h.x, y - h.y) <= h.r) return i;
+      }
+      return -1;
+    }
+    function showTip(i) {
+      const h = evoHits[i];
+      tip.textContent = `${h.level}. ${h.name}`;
+      tip.style.left = cv.offsetLeft + h.x + "px";
+      tip.style.top = cv.offsetTop + h.y - h.r - 6 + "px";
+      tip.classList.remove("hidden");
+    }
+    function hideTip() { tip.classList.add("hidden"); }
+    function set(i) {
+      if (i !== hover) { hover = i; drawEvolutionRing(i); }
+      cv.style.cursor = i >= 0 ? "pointer" : "default";
+      if (i >= 0) showTip(i); else hideTip();
+    }
+
+    cv.addEventListener("mousemove", (e) => set(pick(e.clientX, e.clientY)));
+    cv.addEventListener("mouseleave", () => set(-1));
+    cv.addEventListener("click", (e) => set(pick(e.clientX, e.clientY)));
+    cv.addEventListener("touchstart", (e) => {
+      if (!e.touches[0]) return;
+      const i = pick(e.touches[0].clientX, e.touches[0].clientY);
+      if (i >= 0) { e.preventDefault(); set(i); }
+    }, { passive: false });
   }
 
   // ---- main loop (fixed timestep) ------------------------------------------
@@ -501,6 +558,7 @@
   scoreEl.textContent = "0";
   updateNextPreview();
   drawEvolutionRing();
+  setupEvolutionRing();
   requestAnimationFrame(loop);
 
   // ---- test hooks (Playwright) ---------------------------------------------

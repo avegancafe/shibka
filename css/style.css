@@ -206,4 +206,40 @@ body {
   letter-spacing: 0.6px;
   color: var(--ink-soft);
 }
+.evo-ring-wrap {
+  position: relative;
+  width: 230px;
+  height: 230px;
+}
 #evolution-ring { display: block; }
+
+.evo-tip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 4px 9px;
+  border-radius: 9px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(74, 59, 46, 0.3);
+  z-index: 2;
+}
+/* little pointer triangle under the tooltip */
+.evo-tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--ink);
+}
+.evo-tip.hidden { display: none; }
+
+.evo-hint {
+  font-size: 11px;
+  color: var(--ink-soft);
+}

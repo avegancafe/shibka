@@ -16,8 +16,8 @@
     { level: 7,  name: "Dalmatian",        radius: 64, furColor: "#FBFAF7", earColor: "#2B2B2B", muzzleColor: "#FBFAF7", earStyle: "floppy", eyeStyle: "happy",  marking: "spots",    scoreValue: 48 },
     { level: 8,  name: "Husky",            radius: 72, furColor: "#5B6168", earColor: "#3D4248", muzzleColor: "#F4F5F6", earStyle: "pointy", eyeStyle: "blue",   marking: "mask",     scoreValue: 70 },
     { level: 9,  name: "Golden Retriever", radius: 80, furColor: "#E6B25E", earColor: "#CE9543", muzzleColor: "#F3DDAE", earStyle: "floppy", eyeStyle: "happy",  marking: "none",     scoreValue: 100 },
-    { level: 10, name: "Akita",            radius: 86, furColor: "#C66A2E", earColor: "#A0521F", muzzleColor: "#FBF3E6", earStyle: "pointy", eyeStyle: "sleepy", marking: "mask",     scoreValue: 150 },
-    { level: 11, name: "Shiba Inu",        radius: 92, furColor: "#2B2723", earColor: "#211D1A", muzzleColor: "#F3EADA", browColor: "#C77A3A", eyeRing: "#EEE1CB", earStyle: "pointy", eyeStyle: "round",  marking: "eyebrows", scoreValue: 256 },
+    { level: 10, name: "Samoyed",          radius: 86, furColor: "#F4EFE4", earColor: "#E1D7C6", muzzleColor: "#FFFFFF", earStyle: "pointy", eyeStyle: "round",  marking: "none",     smile: true, scoreValue: 150 },
+    { level: 11, name: "Shiba Inu",        radius: 92, furColor: "#2B2723", earColor: "#211D1A", muzzleColor: "#F3EADA", browColor: "#C77A3A", eyeRing: "#EEE1CB", earStyle: "pointy", eyeStyle: "round",  marking: "eyebrows", smile: true, scoreValue: 256 },
   ];
 
   // ---- small color helpers -------------------------------------------------
@@ -306,8 +306,8 @@
     ctx.strokeStyle = "#2A211C";
     ctx.lineWidth = Math.max(1.5, R * 0.05);
     ctx.lineCap = "round";
-    if (p.name === "Shiba Inu") {
-      // Wide smug shiba smile.
+    if (p.smile) {
+      // Wide smug grin with a little tongue (Shiba's smug smile / Sammy smile).
       ctx.beginPath();
       ctx.moveTo(-R * 0.22, R * 0.4);
       ctx.quadraticCurveTo(0, R * 0.66, R * 0.22, R * 0.4);
