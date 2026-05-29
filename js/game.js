@@ -35,12 +35,41 @@
   const gameOverEl = document.getElementById("game-over");
   const finalScoreEl = document.getElementById("final-score");
 
+  // The physics world is a fixed W×H (420×640); only the *display* scales to
+  // fill the viewport, so the board grows on big screens instead of sitting in a
+  // tiny fixed column. spriteRatio = device px per world unit, kept in sync so
+  // the procedural dog faces re-render crisp at whatever size we're showing.
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + "px";
-  canvas.style.height = H + "px";
-  ctx.scale(dpr, dpr);
+  let spriteRatio = dpr;
+  function fitCanvas() {
+    const aspect = W / H;
+    const wide = window.innerWidth >= 860;
+    let dispW, dispH;
+    if (wide) {
+      // desktop: board fills the height between the side panels
+      const availH = window.innerHeight - 48;
+      const availW = window.innerWidth - 540; // room for left + right panels
+      dispH = Math.max(420, availH);
+      dispW = dispH * aspect;
+      if (dispW > availW) { dispW = Math.max(260, availW); dispH = dispW / aspect; }
+    } else {
+      // mobile/narrow: fill the width (page scrolls for the panels below)
+      dispW = Math.min(window.innerWidth - 24, 460);
+      dispH = dispW / aspect;
+      const maxH = window.innerHeight - 150;
+      if (maxH > 380 && dispH > maxH) { dispH = maxH; dispW = dispH * aspect; }
+    }
+    canvas.style.width = dispW + "px";
+    canvas.style.height = dispH + "px";
+    const ratio = (dispW / W) * dpr;      // device px per world unit
+    canvas.width = Math.round(W * ratio);
+    canvas.height = Math.round(H * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    // quantize so resizing doesn't spawn endless sprite-cache variants
+    spriteRatio = Math.min(3, Math.max(1, Math.round(ratio * 2) / 2));
+  }
+  fitCanvas();
+  window.addEventListener("resize", fitCanvas);
 
   // Weighted toward the smallest breeds (classic Suika feel): Chihuahua /
   // Pomeranian dominate and big Beagles are rare, so the board fills slowly.
@@ -322,7 +351,7 @@
   }
 
   function drawSprite(level, x, y, angle) {
-    const sprite = DOGS.getSprite(level, dpr);
+    const sprite = DOGS.getSprite(level, spriteRatio);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);

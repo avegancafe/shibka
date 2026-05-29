@@ -28,11 +28,13 @@ body {
 }
 
 .app {
-  width: 420px;
-  max-width: 100vw;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
   padding: 14px 12px 22px;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 12px;
 }
 
@@ -76,8 +78,8 @@ body {
 
 .play-wrap {
   position: relative;
-  width: 420px;
-  max-width: 100%;
+  align-self: center;
+  width: fit-content;
   border-radius: 22px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(120, 90, 50, 0.18);
@@ -85,10 +87,9 @@ body {
 
 #game-canvas {
   display: block;
-  width: 420px;
-  height: 640px;
-  max-width: 100%;
+  /* width/height are set inline by fitCanvas() so the board scales to fit */
   cursor: pointer;
+  touch-action: none;
 }
 
 .overlay {
@@ -242,4 +243,40 @@ body {
 .evo-hint {
   font-size: 11px;
   color: var(--ink-soft);
+}
+
+/* Wide screens: lay the board out big and centered with the stats on the left
+   and the next/evolution panel on the right (à la the original Suika layout),
+   so the vertical space goes to the play field instead of a narrow column. */
+@media (min-width: 860px) {
+  body { align-items: center; }
+  .app {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    max-width: none;
+    width: 100%;
+    height: 100vh;
+    gap: 32px;
+    padding: 20px;
+  }
+  .topbar {
+    order: 1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    width: 168px;
+  }
+  .stats {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .stat { min-width: 0; width: 100%; }
+  .play-wrap { order: 2; }
+  .bottombar {
+    order: 3;
+    width: 248px;
+    gap: 12px;
+  }
+  .evolution { margin-top: 0; }
 }
