@@ -32,7 +32,7 @@
   <meta name="twitter:description" content="All roads lead to Shiba — a dog-breed take on the Suika / Watermelon merge game." />
   <meta name="twitter:image" content="https://shibka.kyleholzinger.dev/assets/social-preview.png" />
 
-  <link rel="stylesheet" href="css/style.css?v=11" />
+  <link rel="stylesheet" href="css/style.css?v=13" />
 </head>
 <body>
   <header class="dedication">To the best fiancée in the world, Elise 💚</header>
@@ -96,10 +96,37 @@
     </footer>
   </main>
 
+  <!-- TEMPORARY migration-bridge reader (remove with the avegancafe.github.io
+       bridge — see DEPLOY.md). The old GitHub Pages origin redirects here with
+       #import_best=N; stash it for scores.js to fold into the offline queue, then
+       strip the fragment so a refresh/bookmark can't replay or leak it. Inline +
+       synchronous, ABOVE scores.js, so it runs even if a stale service worker is
+       serving a cached scores.js, and the localStorage stash survives the SW
+       controllerchange reload. -->
+  <script>
+    (function () {
+      try {
+        var p = new URLSearchParams(location.hash.slice(1));
+        var raw = p.get("import_best");
+        if (raw == null) return;
+        var n = Math.floor(Number(raw));
+        if (isFinite(n) && n > 0 && n <= 100000000) {
+          localStorage.setItem("shibka_import_best", String(n));
+        }
+        // strip the fragment regardless of validity
+        history.replaceState(null, "", location.pathname + location.search);
+      } catch (e) {}
+    })();
+  </script>
+
   <script src="vendor/matter.min.js"></script>
-  <script src="js/dogs.js?v=11"></script>
-  <script src="js/game.js?v=11"></script>
-  <script src="js/auth.js?v=11"></script>
+  <script src="js/dogs.js?v=13"></script>
+  <!-- Offline score queue: must load before game.js (seeds the displayed best)
+       and auth.js (flushes it to the server). Also consumes the bridge import
+       stashed by the inline reader above. -->
+  <script src="js/scores.js?v=13"></script>
+  <script src="js/game.js?v=13"></script>
+  <script src="js/auth.js?v=13"></script>
 
   <script>
     // Register the service worker for offline play + home-screen install, and

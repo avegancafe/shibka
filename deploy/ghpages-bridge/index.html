@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shibka has moved</title>
+  <meta name="robots" content="noindex" />
+  <!--
+    Shibka migration bridge — served on the OLD origin (avegancafe.github.io/shibka).
+    The game moved to https://shibka.kyleholzinger.dev. This page recovers a player's
+    stranded anonymous best score (localStorage "shibka_best" on this origin) and
+    carries it to the new site via a URL *fragment* (#import_best=N) — no cross-origin
+    request, so no CORS and no anonymous backend endpoint. The new site folds it into
+    its offline score queue, which flushes to the account on sign-in.
+
+    TEMPORARY: retire when the long tail of returning players dries up (~6–12 months).
+    Teardown: delete the gh-pages branch + set repo Settings → Pages → Source = None,
+    and remove the import reader/consumer on the new site. See DEPLOY.md.
+
+    Design notes:
+    - We NEVER delete shibka_best — there is no cross-origin ack that the handoff
+      landed, and re-handing-off the same value is idempotent on the new side
+      (GREATEST). So a future visit safely re-imports if the first attempt was lost.
+    - We clear ONLY Shibka's own service worker + caches (scope "/shibka", cache
+      prefix "shibka-") so a stale old PWA can't keep serving the dead game, without
+      touching other projects that share the avegancafe.github.io origin.
+    - This page ships NO service worker of its own.
+  -->
+  <style>
+    :root { --bg: #FBF3E7; --card: #FFFCF7; --ink: #4A3B2A; --soft: #8A7458; --accent: #F2A03D; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100%; padding: 24px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(120, 90, 50, 0.18);
+      max-width: 420px; width: 100%;
+      padding: 32px 28px; text-align: center;
+    }
+    .paw { font-size: 44px; line-height: 1; }
+    h1 { font-size: 22px; margin: 14px 0 6px; }
+    p { color: var(--soft); line-height: 1.45; margin: 8px 0; }
+    .score { color: var(--accent); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .go {
+      display: inline-block; margin-top: 18px;
+      background: var(--accent); color: #fff; text-decoration: none;
+      font-weight: 700; padding: 12px 20px; border-radius: 999px;
+    }
+    .hide { display: none; }
+    .small { font-size: 12px; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="paw">🐕</div>
+    <h1>Shibka has a new home</h1>
+    <p id="with-score" class="hide">
+      We found your old score (<span class="score" id="score">0</span>).
+      We’ll bring it with you.
+    </p>
+    <p id="no-score" class="hide">Taking you to the new Shibka…</p>
+    <a class="go" id="go" href="https://shibka.kyleholzinger.dev/">Take me to the new Shibka →</a>
+    <p class="small">Not redirected? <a id="go2" href="https://shibka.kyleholzinger.dev/">shibka.kyleholzinger.dev</a></p>
+  </main>
+
+  <noscript>
+    <p style="text-align:center">
+      Shibka has moved to <a href="https://shibka.kyleholzinger.dev/">shibka.kyleholzinger.dev</a>.
+    </p>
+  </noscript>
+
+  <script>
+    (function () {
+      "use strict";
+      var NEW_URL = "https://shibka.kyleholzinger.dev/";
+      var MAX = 100000000;
+
+      function readBest() {
+        try {
+          var n = Math.floor(Number(localStorage.getItem("shibka_best")) || 0);
+          return isFinite(n) && n > 0 && n <= MAX ? n : 0;
+        } catch (e) { return 0; }
+      }
+
+      function target(best) {
+        return best > 0 ? NEW_URL + "#import_best=" + best : NEW_URL;
+      }
+
+      function withTimeout(promise, ms) {
+        return Promise.race([promise, new Promise(function (res) { setTimeout(res, ms); })]);
+      }
+
+      // Clear ONLY Shibka's stale SW + caches on this shared github.io origin.
+      function cleanup() {
+        var jobs = [];
+        try {
+          if ("serviceWorker" in navigator) {
+            jobs.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(
+                  regs
+                    .filter(function (r) { return (r.scope || "").indexOf("/shibka") !== -1; })
+                    .map(function (r) { return r.unregister(); })
+                );
+              })
+            );
+          }
+        } catch (e) {}
+        try {
+          if (window.caches && caches.keys) {
+            jobs.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(
+                  keys
+                    .filter(function (k) { return k.indexOf("shibka-") === 0; })
+                    .map(function (k) { return caches.delete(k); })
+                );
+              })
+            );
+          }
+        } catch (e) {}
+        return Promise.all(jobs);
+      }
+
+      var navigated = false;
+      function go(best) {
+        if (navigated) return;
+        navigated = true;
+        // Cap the cleanup so a hung promise can't strand the user (~1s).
+        withTimeout(cleanup(), 1000).then(function () {
+          try { localStorage.setItem("shibka_handoff_done", "1"); } catch (e) {}
+          // Deliberately NOT removing shibka_best (idempotent re-handoff insurance).
+          location.replace(target(best));
+        });
+      }
+
+      var best = readBest();
+      var dest = target(best);
+      document.getElementById("go").href = dest;
+      document.getElementById("go2").href = dest;
+      document.getElementById("go").addEventListener("click", function (e) {
+        e.preventDefault();
+        go(best);
+      });
+
+      if (best > 0) {
+        document.getElementById("score").textContent = best.toLocaleString();
+        document.getElementById("with-score").classList.remove("hide");
+        // Give the player ~2.5s to read, then auto-advance (after cleanup).
+        setTimeout(function () { go(best); }, 2500);
+      } else {
+        // Nothing to carry — still clean up the dead PWA, then move on immediately.
+        document.getElementById("no-score").classList.remove("hide");
+        go(best);
+      }
+    })();
+  </script>
+</body>
+</html>
