@@ -140,7 +140,7 @@ The installed app is meant to be a **live copy of the latest deploy**.
   change the `ASSETS` precache list or want to force every client to evict old
   caches.** Day-to-day content changes propagate automatically via network-first —
   you do *not* need to bump for every edit, but bumping on a release is safe and
-  cheap. (Currently `v10`.)
+  cheap. (Currently `v11`.)
 - `index.html` also carries `?v=N` on the css/js links as a belt-and-suspenders
   HTTP-cache bust; less critical now that the SW is network-first.
 - **Home-screen icon caveat:** the OS snapshots the icon at install time. Updating
@@ -165,6 +165,11 @@ The installed app is meant to be a **live copy of the latest deploy**.
 - **Required env:** `DATABASE_URL` (Neon pooled string), `SESSION_SECRET`
   (`openssl rand -hex 32`), `NODE_ENV=production` (so cookies are `Secure`). See
   `server/.env.example`. **Never commit a real `.env`** (gitignored).
+- **DB TLS (`db.js`):** defaults to **full certificate verification** (works with
+  Neon's publicly-trusted cert). `PGSSL=disable` for local non-TLS Postgres,
+  `PGSSL=no-verify` for self-signed. It strips `sslmode`/`channel_binding` from
+  the URL so node-postgres doesn't emit its sslmode deprecation warning — TLS is
+  governed by the `ssl` option, not the URL.
 
 ## Local development
 
