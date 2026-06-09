@@ -1,0 +1,36 @@
+# Caddyfile — Shibka's reverse-proxy site block for shibka.kyleholzinger.dev.
+#
+# Caddy on the box (the shared `proxy` compose project) owns :80/:443 and does
+# automatic Let's Encrypt TLS. This block must be loaded by that Caddy. The
+# recommended wiring (so it survives the schedule app's git pulls and keeps each
+# app's proxy config isolated) is an import directory — see DEPLOY.md:
+#
+#   1. Once, in the proxy's Caddyfile, add:   import /etc/caddy/sites/*.caddy
+#      and mount a host dir into the caddy container:
+#        - /home/ec2-user/caddy-sites:/etc/caddy/sites:ro
+#   2. Copy THIS file to /home/ec2-user/caddy-sites/shibka.caddy
+#   3. Reload Caddy:  docker exec caddy caddy reload --config /etc/caddy/Caddyfile
+#
+# (Reload is graceful — no downtime and no certificate re-issuance.)
+
+shibka.kyleholzinger.dev {
+    # Automatic HTTPS via Let's Encrypt (production ACME). Caddy handles
+    # issuance, renewal, and the HTTP->HTTPS redirect.
+
+    header {
+        # HSTS belongs at the TLS terminator (Caddy), only sent over HTTPS.
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Don't advertise the server software.
+        -Server
+    }
+
+    # The Node app serves both the static game and /api. Reached by container
+    # name over proxy_net; the container does not publish ports to the host.
+    reverse_proxy shibka:3000 {
+        health_uri /healthz
+        health_interval 30s
+    }
+}

@@ -284,6 +284,9 @@
     gameOver = true;
     finalScoreEl.textContent = score;
     gameOverEl.classList.remove("hidden");
+    // Let the account layer (auth.js) persist this run's score, if signed in.
+    // The game itself stays offline-capable; this is a best-effort enhancement.
+    window.dispatchEvent(new CustomEvent("shibka:gameover", { detail: { score, best } }));
   }
 
   // ---- helpers --------------------------------------------------------------
@@ -599,6 +602,17 @@
     get gameOver() { return gameOver; },
     get dogCount() { return getDogBodies().length; },
     get levels() { return getDogBodies().map((b) => b.shibLevel); },
+    // Raise the displayed best to a server-synced value (account login / score
+    // save). Only ever raises — never lowers a locally-earned best.
+    setBest(n) {
+      n = Number(n) || 0;
+      if (n > best) {
+        best = n;
+        bestEl.textContent = best;
+        localStorage.setItem("shibka_best", String(best));
+      }
+      return best;
+    },
     // Force-create a dog at canvas/world coords (coords are 1:1 with world).
     spawnAt(level, x, y) {
       level = Math.max(1, Math.min(11, level | 0));

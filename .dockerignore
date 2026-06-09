@@ -1,0 +1,20 @@
+# Keep the image to just the game + the server. The static game is served by
+# the Node app from the repo root (server serves ../), so index.html, css/, js/,
+# vendor/, assets/, and server/ must stay — everything below is excluded.
+.git
+.github
+.claude
+**/node_modules
+# never bake secrets into the image
+.env
+**/.env
+**/*.env
+!**/*.env.example
+.playwright-mcp
+deploy
+docker-compose.yml
+*.md
+.gitignore
+.dockerignore
+shibka-*.png
+.DS_Store

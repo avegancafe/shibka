@@ -12,7 +12,7 @@
 // VERSION only controls the *offline snapshot* cache name; bump it if you change
 // the ASSETS list or want to force-evict old caches. Day-to-day content updates
 // flow automatically without touching it.
-const VERSION = "v10";
+const VERSION = "v11";
 const CACHE = "shibka-" + VERSION;
 
 // Relative URLs so this works at the domain root (localhost) and under a
@@ -23,6 +23,7 @@ const ASSETS = [
   "./css/style.css",
   "./js/dogs.js",
   "./js/game.js",
+  "./js/auth.js",
   "./vendor/matter.min.js",
   "./manifest.webmanifest",
   "./assets/favicon.png",
@@ -58,6 +59,11 @@ self.addEventListener("fetch", (e) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // leave cross-origin alone
+
+  // The API and health check are dynamic, auth-bearing, and must never be served
+  // from cache (a stale /api/me would show the wrong login state). Let them go
+  // straight to the network, untouched by the worker.
+  if (url.pathname.startsWith("/api/") || url.pathname === "/healthz") return;
 
   const isNav = req.mode === "navigate";
 

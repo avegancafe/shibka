@@ -1,0 +1,48 @@
+# docker-compose.app.yml — Shibka app service (mirrors the schedule app pattern).
+#
+# Run with an explicit project name so it stays isolated from the proxy project
+# and any other app:
+#
+#   docker compose -p shibka -f docker-compose.app.yml up -d --build
+#
+# Built NATIVELY on the (arm64) box — no registry, no QEMU. The app does NOT
+# publish ports; Caddy reaches it by container name ("shibka") over the shared,
+# externally-managed `proxy_net` network. All state lives in Neon, so there is
+# no volume. Secrets come from deploy/.env (see env.production.sample).
+
+name: shibka
+
+services:
+  shibka:
+    image: shibka:local
+    build:
+      # This file is in deploy/, so the build context is the repo root.
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: shibka
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    networks:
+      - proxy_net
+    logging:
+      driver: journald
+      options:
+        tag: shibka
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  # Join the proxy's externally-managed network; do not recreate it here.
+  proxy_net:
+    name: proxy_net
+    external: true

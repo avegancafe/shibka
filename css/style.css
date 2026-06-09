@@ -58,8 +58,14 @@ body {
 
 .topbar {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.topbar-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
 }
 
 .logo {
@@ -263,6 +269,181 @@ body {
   color: var(--ink-soft);
 }
 
+/* ---- account widget ---------------------------------------------------- */
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--container);
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 0 3px 10px rgba(120, 90, 50, 0.12);
+}
+.account:empty { display: none; }
+.account-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ink-soft);
+}
+.account-who { display: flex; flex-direction: column; gap: 2px; }
+.account-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.btn-mini {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+.btn-mini:hover { filter: brightness(1.05); }
+.btn-mini:active { transform: translateY(1px); }
+.btn-ghost {
+  background: transparent;
+  color: var(--accent);
+  box-shadow: none;
+  border: 1.5px solid rgba(242, 160, 61, 0.55);
+}
+
+/* ---- leaderboard ------------------------------------------------------- */
+.leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--container);
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: 0 3px 10px rgba(120, 90, 50, 0.12);
+}
+.lb-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ink-soft);
+}
+.lb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  font-size: 14px;
+}
+.lb-row:nth-child(odd) { background: rgba(138, 116, 88, 0.06); }
+.lb-mine {
+  background: rgba(242, 160, 61, 0.18) !important;
+  font-weight: 800;
+}
+.lb-rank { color: var(--ink-soft); font-weight: 700; text-align: right; }
+.lb-name {
+  color: var(--ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-score { color: var(--accent); font-weight: 800; font-variant-numeric: tabular-nums; }
+.lb-empty { color: var(--ink-soft); font-size: 13px; padding: 6px 8px; }
+.lb-me {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.lb-me:empty { display: none; }
+
+/* ---- auth / profile modal ---------------------------------------------- */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(74, 59, 46, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.auth-overlay.hidden { display: none; }
+.auth-card {
+  background: var(--container);
+  border-radius: 20px;
+  padding: 24px 26px;
+  width: 100%;
+  max-width: 340px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3);
+}
+.auth-card h2 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  color: var(--accent);
+}
+.auth-card form { display: flex; flex-direction: column; gap: 12px; }
+.auth-field { display: flex; flex-direction: column; gap: 4px; }
+.auth-field span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.auth-field input {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1.5px solid rgba(138, 116, 88, 0.3);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--ink);
+}
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(242, 160, 61, 0.2);
+}
+.auth-submit { width: 100%; margin-top: 4px; }
+.auth-hint { margin: 0; font-size: 12px; color: var(--ink-soft); }
+.auth-error { margin: 0; font-size: 13px; color: var(--danger); font-weight: 600; min-height: 1px; }
+.auth-error:empty, .auth-ok:empty { display: none; }
+.auth-ok { margin: 0; font-size: 13px; color: #2e8b57; font-weight: 600; }
+.auth-toggle { margin: 4px 0 0; font-size: 13px; color: var(--ink-soft); text-align: center; }
+.auth-sep { border: none; border-top: 1px solid rgba(138, 116, 88, 0.2); margin: 18px 0 4px; }
+.auth-close { display: block; margin: 14px auto 0; }
+.linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* Wide screens: lay the board out big and centered with the stats on the left
    and the next/evolution panel on the right (à la the original Suika layout),
    so the vertical space goes to the play field instead of a narrow column. */
@@ -280,10 +461,14 @@ body {
   }
   .topbar {
     order: 1;
+    align-items: stretch;
+    gap: 16px;
+    width: 188px;
+  }
+  .topbar-row {
     flex-direction: column;
     align-items: stretch;
     gap: 16px;
-    width: 168px;
   }
   .stats {
     flex-direction: column;
@@ -293,8 +478,11 @@ body {
   .play-wrap { order: 2; }
   .bottombar {
     order: 3;
-    width: 248px;
+    width: 268px;
     gap: 12px;
+    /* tall right rail; scrolls if the leaderboard grows past the viewport */
+    max-height: calc(100vh - var(--ded-h) - 40px);
+    overflow-y: auto;
   }
   .evolution { margin-top: 0; }
 }

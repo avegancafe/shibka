@@ -11,21 +11,29 @@ tiny **Chihuahua** all the way to the smug, meme-worthy **Shiba Inu**.
 
 ## Run locally
 
-It's a plain static site — no build step, no npm. Just serve the folder and open
-`index.html`. From this directory:
+The **game** is still a plain static site (vendored physics, procedural art, no
+build step). The accounts + leaderboard are served by a small **Express +
+Postgres** backend in `server/`. The easiest way to run the whole thing is Docker:
 
 ```bash
-python3 -m http.server 8000
+docker compose up -d db          # local Postgres
+cd server && npm install
+DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka \
+  PGSSL=disable SESSION_SECRET=dev-secret npm run migrate
+DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka \
+  PGSSL=disable SESSION_SECRET=dev-secret npm run dev
+# open http://localhost:3000
 ```
 
-Then open <http://localhost:8000> in a browser.
+Or run the entire stack (Postgres + Node) in Docker: `docker compose --profile full up`.
 
-(Any static file server works; you need a server rather than `file://` only so
-the relative `<script>` paths and `localStorage` behave normally.)
+The **gameplay itself runs fully offline** — `matter-js` is vendored in `vendor/`,
+dog faces are drawn procedurally on a canvas, and only the system font stack is
+used. The account/leaderboard layer is a progressive enhancement: when there's no
+network (or no backend), you simply play as a guest with a `localStorage` best.
 
-Everything runs **fully offline** — `matter-js` is vendored in `vendor/`, dog
-faces are drawn procedurally on a canvas, and the system font stack is used. No
-network requests at runtime.
+See **[DEPLOY.md](DEPLOY.md)** for the full local-dev and production (EC2 + Neon +
+GitHub Actions) setup.
 
 ## Install it (offline-ready PWA)
 
@@ -59,7 +67,15 @@ newest version with no stale CSS/JS and no manual cache-busting.
 - A dashed **danger line** sits near the top. If a settled dog stays above it for
   ~2 seconds, it's **game over**.
 - Merging two **Shiba Inus** (the biggest) pops them both for a big bonus.
-- Your **best** score is saved in `localStorage`.
+- Your **best** score is saved in `localStorage`, and **synced to your account**
+  (and the global leaderboard) when you're signed in.
+
+## Accounts & leaderboard
+
+Create an account (username + password) and pick a **display name** — that's what
+shows on the global **leaderboard**. Your best score follows your account across
+devices, and you can change your display name or password anytime from **Profile**.
+It's optional: without an account you still play as a guest with a local best.
 
 ## Breed progression
 
@@ -69,11 +85,17 @@ Husky → Jack Russell → Samoyed → **Shiba Inu** 🐕
 ## Project structure
 
 ```
-index.html          markup + stable DOM hooks
-css/style.css        warm cream/biscuit palette + layout
-js/dogs.js           breed data (LEVELS) + parametric drawDog / offscreen sprites
-js/game.js           matter.js setup, input, drop & merge logic, scoring, test hooks
-vendor/matter.min.js matter-js 0.20.0 (vendored)
+index.html            markup + stable DOM hooks (game, account widget, leaderboard)
+css/style.css          warm cream/biscuit palette + layout
+js/dogs.js             breed data (LEVELS) + parametric drawDog / offscreen sprites
+js/game.js             matter.js setup, input, drop & merge logic, scoring, test hooks
+js/auth.js             account UI + best-score sync + leaderboard (progressive enhancement)
+vendor/matter.min.js   matter-js 0.20.0 (vendored)
+server/                Express + Postgres backend (auth, score, leaderboard) + schema/migrate
+docker-compose.yml     local Postgres (+ optional full stack)
+deploy/                systemd unit + nginx config for EC2
+.github/workflows/     GitHub Actions deploy to EC2
+DEPLOY.md              local-dev + production runbook
 ```
 
 ## Credits

@@ -22,34 +22,38 @@
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Shibka — Dog Merge Game" />
   <meta property="og:description" content="All roads lead to Shiba — a dog-breed take on the Suika / Watermelon merge game." />
-  <meta property="og:url" content="https://avegancafe.github.io/shibka/" />
-  <meta property="og:image" content="https://avegancafe.github.io/shibka/assets/social-preview.png" />
+  <meta property="og:url" content="https://shibka.kyleholzinger.dev/" />
+  <meta property="og:image" content="https://shibka.kyleholzinger.dev/assets/social-preview.png" />
   <meta property="og:image:width" content="1280" />
   <meta property="og:image:height" content="640" />
   <meta property="og:image:alt" content="Shibka — all roads lead to Shiba (a black-and-tan Shiba Inu face)" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Shibka — Dog Merge Game" />
   <meta name="twitter:description" content="All roads lead to Shiba — a dog-breed take on the Suika / Watermelon merge game." />
-  <meta name="twitter:image" content="https://avegancafe.github.io/shibka/assets/social-preview.png" />
+  <meta name="twitter:image" content="https://shibka.kyleholzinger.dev/assets/social-preview.png" />
 
-  <link rel="stylesheet" href="css/style.css?v=8" />
+  <link rel="stylesheet" href="css/style.css?v=11" />
 </head>
 <body>
   <header class="dedication">To the best fiancée in the world, Elise 💚</header>
 
   <main class="app">
     <header class="topbar">
-      <h1 class="logo">Shibka <span class="paw">🐾</span></h1>
-      <div class="stats">
-        <div class="stat">
-          <span class="stat-label">Score</span>
-          <span class="stat-value" id="score">0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Best</span>
-          <span class="stat-value" id="best">0</span>
+      <div class="topbar-row">
+        <h1 class="logo">Shibka <span class="paw">🐾</span></h1>
+        <div class="stats">
+          <div class="stat">
+            <span class="stat-label">Score</span>
+            <span class="stat-value" id="score">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Best</span>
+            <span class="stat-value" id="best">0</span>
+          </div>
         </div>
       </div>
+      <!-- Account widget (login state, profile, logout) — filled by auth.js -->
+      <div id="account" class="account"></div>
     </header>
 
     <div class="play-wrap">
@@ -72,6 +76,15 @@
       </div>
       <p class="hint">Move to aim · Click / Space / Tap to drop · Merge matching pups</p>
 
+      <!-- Global leaderboard — filled by auth.js (best score per display name) -->
+      <section class="leaderboard" id="leaderboard">
+        <span class="lb-title">Leaderboard</span>
+        <ol class="lb-list" id="leaderboard-list">
+          <li class="lb-empty">Loading…</li>
+        </ol>
+        <span class="lb-me" id="leaderboard-me"></span>
+      </section>
+
       <section class="evolution">
         <span class="evo-label">Dog Evolution</span>
         <div class="evo-ring-wrap">
@@ -84,8 +97,9 @@
   </main>
 
   <script src="vendor/matter.min.js"></script>
-  <script src="js/dogs.js?v=8"></script>
-  <script src="js/game.js?v=8"></script>
+  <script src="js/dogs.js?v=11"></script>
+  <script src="js/game.js?v=11"></script>
+  <script src="js/auth.js?v=11"></script>
 
   <script>
     // Register the service worker for offline play + home-screen install, and

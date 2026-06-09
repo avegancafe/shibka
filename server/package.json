@@ -1,0 +1,20 @@
+{
+  "name": "shibka-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Shibka backend — accounts, best-score persistence, and a global leaderboard (Express + Neon Postgres).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "migrate": "node migrate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}

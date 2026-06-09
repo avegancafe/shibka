@@ -5,16 +5,26 @@ pups into the bin; two of the same breed merge into the next breed up. The goal
 (the "watermelon") is the **Shiba Inu**.
 
 - **Repo:** github.com/avegancafe/shibka (GitHub account `avegancafe`)
-- **Live:** https://avegancafe.github.io/shibka/ (GitHub Pages, branch `main`, root)
-- **Stack:** plain static site — **no build step, no npm, no framework.** HTML +
-  CSS + vanilla JS + a vendored physics engine. Edit files and reload.
+- **Live:** https://shibka.kyleholzinger.dev — a **Docker container** on the
+  shared EC2 box (`avegancafe_bot_nemoclaw`, arm64, `54.82.52.150`) behind a
+  shared **Caddy** reverse proxy (auto Let's Encrypt TLS) on the `proxy_net`
+  network. Auto-deploys on push to `main` via GitHub Actions → SSH →
+  `deploy/deploy.sh`. *(Was GitHub Pages; see git history.)*
+- **Stack:** the **game** is still vanilla — **no build step, no framework** for
+  gameplay (HTML + CSS + vanilla JS + vendored physics; edit and reload). There is
+  now a small **Express + Postgres** backend in `server/` for accounts, best-score
+  sync, and the leaderboard (`npm` only for the server). Data lives in **Neon
+  Postgres** (project `Shibka`, pooled connection). See `DEPLOY.md`.
 
 ## Golden rules (don't break these)
 
-1. **It must work fully offline / with no runtime network.** matter-js is vendored
-   in `vendor/`, every dog is drawn **procedurally on canvas** (no image files for
-   gameplay), and only the system font stack is used. Never add a runtime CDN/font/
-   image dependency.
+1. **Gameplay must work fully offline / with no runtime network.** matter-js is
+   vendored in `vendor/`, every dog is drawn **procedurally on canvas** (no image
+   files for gameplay), and only the system font stack is used. Never add a runtime
+   CDN/font/image dependency to the *game*. The accounts/leaderboard layer
+   (`js/auth.js` → `/api/*`) is a **progressive enhancement**: it must degrade
+   gracefully (play as a guest with a `localStorage` best) when the API is
+   unreachable. Never make core gameplay depend on the backend.
 2. **Physics lives in fixed world units: `W=420 × H=640`.** Never tie gameplay to
    pixels. Only the *display* scales (see `fitCanvas`). `spawnAt`/pointer math all
    work in these world coords.
@@ -36,13 +46,18 @@ pups into the bin; two of the same breed merge into the next breed up. The goal
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Markup, stable DOM hooks, PWA `<meta>`/manifest links, SW registration, dedication banner. |
-| `css/style.css` | Palette (CSS vars), layout. **Responsive:** mobile = stacked column; desktop (`min-width: 860px`) = 3 columns (stats left, board center, next/evolution right). |
+| `index.html` | Markup, stable DOM hooks, PWA `<meta>`/manifest links, SW registration, dedication banner. Also the `#account` widget + `#leaderboard` containers (filled by `auth.js`). Loads `js/auth.js`. |
+| `css/style.css` | Palette (CSS vars), layout. **Responsive:** mobile = stacked column; desktop (`min-width: 860px`) = 3 columns (stats **+ account** left, board center, next/**leaderboard**/evolution right). `.topbar-row` wraps logo+stats so the account widget can stack beneath. Also the account, leaderboard, and auth-modal styles. |
 | `js/dogs.js` | `LEVELS` breed data + the parametric `drawDogFace()` renderer + offscreen sprite cache (`getSprite`). Exposed as `window.SHIBKA_DOGS`. |
-| `js/game.js` | matter-js engine, input, drop + merge logic, game-over, scoring, `fitCanvas` (responsive scaling), the evolution ring, and the `window.__SHIBKA` hooks. |
+| `js/game.js` | matter-js engine, input, drop + merge logic, game-over, scoring, `fitCanvas` (responsive scaling), the evolution ring, and the `window.__SHIBKA` hooks. On game over it dispatches a `shibka:gameover` CustomEvent (`{score, best}`); `__SHIBKA.setBest(n)` raises the displayed best (used by the account sync). |
+| `js/auth.js` | **Account layer** (progressive enhancement). Account widget (login/signup/profile/logout), best-score sync (`POST /api/score` on `shibka:gameover`, reconcile local best on login via `__SHIBKA.setBest`), and the leaderboard. All `/api` calls degrade gracefully offline. |
 | `vendor/matter.min.js` | matter-js 0.20.0, vendored. Don't swap for a CDN. |
 | `manifest.webmanifest` | PWA manifest (standalone, Shiba icons, theme colors). |
-| `sw.js` | Service worker — network-first + offline precache (see PWA section). |
+| `sw.js` | Service worker — network-first + offline precache. **Skips `/api/*` + `/healthz`** (never cached — a stale `/api/me` would show the wrong login state). |
+| `server/` | Express + Postgres backend: `server.js` (routes, scrypt passwords, HMAC-signed cookie sessions), `db.js` (pg pool), `schema.sql` + `migrate.js`, `.env.example`, `package.json`. |
+| `docker-compose.yml` | Local-dev Postgres (always-on `db` service) + an optional full-stack `app` service (`--profile full`). Prod uses `deploy/` instead. |
+| `deploy/` | Production (EC2 box): `Dockerfile` (arm64 native build), `docker-compose.app.yml` (the `shibka` container on `proxy_net`), `Caddyfile` (the `shibka.kyleholzinger.dev` site block for the shared Caddy proxy), `deploy.sh` (git pull + build + up + `/healthz`), `env.production.sample`. Mirrors the box's existing `schedule` app. |
+| `.github/workflows/deploy.yml` | CI deploy: on push to `main`, SSH to the box (`ec2-user@54.82.52.150`) → `~/apps/shibka/deploy/deploy.sh`. |
 | `assets/` | Generated PNGs: `favicon.png`, `favicon-32.png`, `icon-192/512/512-maskable`, `apple-touch-icon`, `social-preview.png`. All are the Shiba face / brand card. |
 
 ## The dog roster
@@ -130,11 +145,38 @@ The installed app is meant to be a **live copy of the latest deploy**.
   the icon requires removing + re-adding the home-screen shortcut. Code/content
   update automatically.
 
+## Backend, accounts & persistence
+
+`server/` is an Express app that serves **both** the static game and a JSON API.
+- **Auth:** username + password (case-insensitive unique username). Passwords are
+  hashed with Node's built-in **scrypt** (no native deps). Session = an
+  **HMAC-signed token in an httpOnly cookie** (`SESSION_SECRET`), 30-day TTL —
+  stateless, no session table.
+- **Endpoints:** `POST /api/signup|login|logout`, `GET /api/me` (200 `{user:null}`
+  when signed out — *not* 401, so anonymous loads don't log a console error),
+  `PATCH /api/profile` (display name and/or password — password change requires
+  the current one), `POST /api/score` (best = `GREATEST`), `GET /api/leaderboard`
+  (top-N + the caller's rank). `GET /healthz` checks DB connectivity.
+- **DB:** one `users` table (`schema.sql`); best score lives on the user row, the
+  leaderboard is an `ORDER BY best_score DESC`. **`pg` returns `BIGINT` ids as
+  strings** — the session `uid` is coerced to a number (gotcha we hit).
+- **Required env:** `DATABASE_URL` (Neon pooled string), `SESSION_SECRET`
+  (`openssl rand -hex 32`), `NODE_ENV=production` (so cookies are `Secure`). See
+  `server/.env.example`. **Never commit a real `.env`** (gitignored).
+
 ## Local development
 
+The **game alone** can still be served statically (`python3 -m http.server 8000`)
+if you're only touching gameplay/CSS — the account UI just shows logged-out and
+the leaderboard reads "unavailable". For the **full app** (accounts/leaderboard)
+run the backend against a local Postgres:
+
 ```bash
-python3 -m http.server 8000   # from the repo root
-# open http://localhost:8000  (must be served over http, not file://, for SW + localStorage)
+docker compose up -d db          # local Postgres (Docker)
+cd server && npm install
+export DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka PGSSL=disable SESSION_SECRET=dev-secret
+npm run migrate && npm run dev   # open http://localhost:3000
+# ...or the whole stack in Docker:  docker compose --profile full up
 ```
 
 Service workers also run on `localhost` (a secure context). **Gotcha:** when
@@ -156,13 +198,27 @@ and assert via `window.__SHIBKA` (deterministic merge test, game-over, restart),
 plus screenshots and a console-error check. Always verify both the wide and narrow
 layouts when touching CSS/`fitCanvas`.
 
+For **account/leaderboard** changes, serve via the **Node server** (`:3000`, with
+the docker-compose DB up) rather than `python http.server`, then exercise:
+signup → the account widget flips to "Playing as …"; a real game-over `POST`s the
+score and the leaderboard updates; login reconciles a higher local best up; the
+profile modal renames/updates the password. The Playwright MCP needs Google Chrome
+installed (`brew install --cask google-chrome`). Keep the **zero-console-errors**
+bar — that's why `/api/me` returns `200 {user:null}` instead of 401.
+
 ## Deploying
 
-Push to `main`; GitHub Pages auto-builds (~1 min). Then verify live:
+Push to `main`; the **GitHub Actions** workflow SSHes into the box and runs
+`deploy/deploy.sh`, which does `git pull` + `docker compose build` (native arm64)
++ `up -d` + a `/healthz` gate (the container also runs the idempotent
+`migrate.js` on boot). Full one-time box setup (clone to `~/apps/shibka`, the
+Caddy site wiring on `proxy_net`, `deploy/.env`, DNS, repo secrets) is in
+**`DEPLOY.md`**. Schema changes ship by editing `server/schema.sql` (keep every
+statement idempotent — it runs on every deploy). Then verify live:
 
 ```bash
-# wait for the deploy to serve your change, e.g.:
-until curl -s "https://avegancafe.github.io/shibka/?cb=$(date +%s)" | grep -q "SOMETHING_YOU_CHANGED"; do sleep 5; done
+until curl -s "https://shibka.kyleholzinger.dev/?cb=$(date +%s)" | grep -q "SOMETHING_YOU_CHANGED"; do sleep 5; done
+curl -s https://shibka.kyleholzinger.dev/healthz   # -> {"ok":true}
 ```
 
 The **repo social-preview image** (shown when sharing the github.com link) is set

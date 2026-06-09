@@ -1,0 +1,52 @@
+# Local development stack.
+#
+#   docker compose up -d db          # just Postgres; run the server on your host
+#   docker compose --profile full up  # Postgres + the Node server, all in Docker
+#
+# The "db" service always runs. The "app" service only runs with `--profile full`,
+# so you can pick: host-run Node against the container DB (fast iteration with your
+# own node), or run the whole stack in Docker.
+#
+# Production uses Neon + systemd + nginx instead — see DEPLOY.md. This file is for
+# local dev only.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shibka
+      POSTGRES_PASSWORD: shibka
+      POSTGRES_DB: shibka
+    ports:
+      - "5432:5432"
+    volumes:
+      - shibka_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shibka -d shibka"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    profiles: ["full"]
+    image: node:22-alpine
+    working_dir: /app/server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # "db" is the compose service hostname; PGSSL=disable since it's local/non-TLS.
+      DATABASE_URL: postgres://shibka:shibka@db:5432/shibka
+      PGSSL: disable
+      SESSION_SECRET: dev-secret-change-me-only-for-local-dev
+      NODE_ENV: development
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+      # keep the container's node_modules separate from the host's
+      - /app/server/node_modules
+    command: sh -c "npm ci && npm run migrate && npm run dev"
+
+volumes:
+  shibka_pgdata:
