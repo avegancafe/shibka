@@ -8,7 +8,9 @@ pups into the bin; two of the same breed merge into the next breed up. The goal
 - **Live:** https://shibka.kyleholzinger.dev — a **Docker container** on the
   shared EC2 box (`avegancafe_bot_nemoclaw`, arm64, `54.82.52.150`) behind a
   shared **Caddy** reverse proxy (auto Let's Encrypt TLS) on the `proxy_net`
-  network. Auto-deploys on push to `main` via GitHub Actions → SSH →
+  network. The proxy is its own repo, **avegancafe_lb** (`~/apps/lb` on the box);
+  Shibka's site block is `sites/shibka.kyleholzinger.dev.caddy` there, mirroring
+  `deploy/Caddyfile`. Auto-deploys on push to `main` via GitHub Actions → SSH →
   `deploy/deploy.sh`. *(Was GitHub Pages; see git history.)*
 - **Stack:** the **game** is still vanilla — **no build step, no framework** for
   gameplay (HTML + CSS + vanilla JS + vendored physics; edit and reload). There is

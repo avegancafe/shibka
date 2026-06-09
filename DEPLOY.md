@@ -47,14 +47,10 @@ DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka \
 SSH in: `ssh -i ~/.ssh/avegancafe.pem ec2-user@54.82.52.150`
 
 ### a. Clone the repo
-The box pulls over SSH with a read-only deploy key (same pattern as `schedule`).
+The `shibka` repo is public, so the box clones it over HTTPS (no key needed).
 ```bash
 mkdir -p ~/apps && cd ~/apps
-# Add a GitHub *deploy key* for avegancafe/shibka first (read-only is enough):
-#   ssh-keygen -t ed25519 -f ~/.ssh/shibka_deploy -N ""
-#   -> add ~/.ssh/shibka_deploy.pub to the repo's Settings → Deploy keys
-#   -> add a Host entry in ~/.ssh/config mapping github.com to that key, or:
-GIT_SSH_COMMAND="ssh -i ~/.ssh/shibka_deploy" git clone git@github.com:avegancafe/shibka.git
+git clone https://github.com/avegancafe/shibka.git
 cd ~/apps/shibka
 ```
 
@@ -72,38 +68,17 @@ chmod 600 deploy/.env
 The Neon schema is already applied; `deploy.sh`/the container re-run the
 idempotent migration on every deploy anyway.
 
-### c. Wire Caddy to route the new subdomain
-Caddy runs as the `proxy` compose project and currently mounts a single
-`Caddyfile` (in the `schedule` repo). To add Shibka **without** editing that
-tracked file (a local edit would block `schedule`'s `git pull`), switch the proxy
-to an **import directory** of per-app snippets — a one-time change you should
-commit to the `schedule` repo so it persists:
-
-1. In the proxy's `Caddyfile` (`~/apps/schedule/deploy/Caddyfile`), add at the top:
-   ```
-   import /etc/caddy/sites/*.caddy
-   ```
-2. In `~/apps/schedule/deploy/docker-compose.proxy.yml`, mount a host dir into the
-   caddy service:
-   ```yaml
-       volumes:
-         - ./Caddyfile:/etc/caddy/Caddyfile:ro
-         - /home/ec2-user/caddy-sites:/etc/caddy/sites:ro   # add this
-         - caddy_data:/data
-         - caddy_config:/config
-   ```
-   then recreate Caddy once: `docker compose -p proxy -f ~/apps/schedule/deploy/docker-compose.proxy.yml up -d`
-3. Drop Shibka's site block in and reload (graceful — no downtime, no cert churn):
-   ```bash
-   mkdir -p ~/caddy-sites
-   cp ~/apps/shibka/deploy/Caddyfile ~/caddy-sites/shibka.caddy
-   docker exec caddy caddy reload --config /etc/caddy/Caddyfile
-   ```
-
-> Simpler alternative (no proxy refactor): append the contents of
-> `deploy/Caddyfile` to `~/apps/schedule/deploy/Caddyfile` and commit it to the
-> `schedule` repo. Less clean (Shibka's proxy config lives in another repo), but
-> fewer moving parts.
+### c. Route the subdomain via the shared proxy (avegancafe_lb)
+The Caddy reverse proxy lives in its own repo, **avegancafe_lb**
+(github.com/avegancafe/avegancafe_lb), cloned at `~/apps/lb`. Each app's site
+block is one file under `sites/<domain>.caddy`. Shibka's
+(`sites/shibka.kyleholzinger.dev.caddy`) mirrors this repo's `deploy/Caddyfile`
+and is already in place. To re-apply or change routing:
+```bash
+cd ~/apps/lb && git pull && ./deploy.sh   # git pull + up -d + validate + graceful reload
+```
+To wire it from scratch: add `deploy/Caddyfile`'s contents to the lb repo as
+`sites/shibka.kyleholzinger.dev.caddy`, push, then run the above on the box.
 
 ### d. DNS
 Point `shibka.kyleholzinger.dev` at the box (same as `schedule`):
