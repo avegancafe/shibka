@@ -32,7 +32,7 @@
   <meta name="twitter:description" content="All roads lead to Shiba — a dog-breed take on the Suika / Watermelon merge game." />
   <meta name="twitter:image" content="https://shibka.kyleholzinger.dev/assets/social-preview.png" />
 
-  <link rel="stylesheet" href="css/style.css?v=13" />
+  <link rel="stylesheet" href="css/style.css?v=14" />
 </head>
 <body>
   <header class="dedication">To the best fiancée in the world, Elise 💚</header>
@@ -41,18 +41,34 @@
     <header class="topbar">
       <div class="topbar-row">
         <h1 class="logo">Shibka <span class="paw">🐾</span></h1>
-        <div class="stats">
-          <div class="stat">
-            <span class="stat-label">Score</span>
-            <span class="stat-value" id="score">0</span>
+        <div class="topbar-right">
+          <div class="stats">
+            <div class="stat">
+              <span class="stat-label">Score</span>
+              <span class="stat-value" id="score">0</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Best</span>
+              <span class="stat-value" id="best">0</span>
+            </div>
           </div>
-          <div class="stat">
-            <span class="stat-label">Best</span>
-            <span class="stat-value" id="best">0</span>
-          </div>
+          <!-- Hamburger: opens the #menu-panel dropdown on narrow screens. Hidden
+               on desktop (>=860px), where the account + leaderboard live in the rails. -->
+          <button id="menu-toggle" class="hamburger" type="button" aria-label="Menu"
+                  aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel">
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+          </button>
         </div>
       </div>
-      <!-- Account widget (login state, profile, logout) — filled by auth.js -->
+
+      <!-- Mobile flyout: below 860px auth.js relocates #account and #leaderboard
+           in here; at/above 860px it restores them to their rail homes. -->
+      <div id="menu-panel" class="menu-panel hidden" aria-label="Account and leaderboard"></div>
+
+      <!-- Account widget (login state, profile, logout) — filled by auth.js.
+           Desktop home: the left rail; on mobile it moves into #menu-panel. -->
       <div id="account" class="account"></div>
     </header>
 
@@ -133,13 +149,13 @@
   </script>
 
   <script src="vendor/matter.min.js"></script>
-  <script src="js/dogs.js?v=13"></script>
+  <script src="js/dogs.js?v=14"></script>
   <!-- Offline score queue: must load before game.js (seeds the displayed best)
        and auth.js (flushes it to the server). Also consumes the bridge import
        stashed by the inline reader above. -->
-  <script src="js/scores.js?v=13"></script>
-  <script src="js/game.js?v=13"></script>
-  <script src="js/auth.js?v=13"></script>
+  <script src="js/scores.js?v=14"></script>
+  <script src="js/game.js?v=14"></script>
+  <script src="js/auth.js?v=14"></script>
 
   <script>
     // Register the service worker for offline play + home-screen install, and

@@ -337,6 +337,102 @@ body {
   border: 1.5px solid rgba(242, 160, 61, 0.55);
 }
 
+/* ---- menu-bar hamburger + mobile flyout -------------------------------- */
+/* On narrow screens the account widget + leaderboard live behind a hamburger
+   in the menu bar; auth.js relocates those same nodes into #menu-panel (and
+   restores them to their rails at >=860px). The desktop layout is left
+   untouched: the wrapper collapses to display:contents and the hamburger +
+   panel are hidden (see the min-width:860px block below). */
+.topbar { position: relative; } /* anchor for the absolutely-positioned dropdown */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hamburger {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 44px;
+  height: 40px;
+  padding: 0 10px;
+  background: var(--container);
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 3px 10px rgba(120, 90, 50, 0.12);
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+.hamburger:hover { filter: brightness(1.03); }
+.hamburger:active { transform: translateY(1px); }
+.hamburger span {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+/* morph the bars into an X while the menu is open */
+.hamburger[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+.hamburger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.menu-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 40; /* above the board; below the auth modal (z-index 50) */
+  margin-top: 8px;
+  width: min(92vw, 320px);
+  max-height: min(72vh, 560px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--container);
+  border-radius: 16px;
+  box-shadow: 0 16px 44px rgba(74, 59, 46, 0.3);
+  transform-origin: top right;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.menu-panel.hidden {
+  opacity: 0;
+  transform: scale(0.96) translateY(-6px);
+  pointer-events: none;
+  visibility: hidden;
+}
+/* Inside the dropdown the two widgets are sections of one surface, so drop
+   their individual card chrome and separate them with a hairline. */
+.menu-panel .account,
+.menu-panel .leaderboard {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+}
+.menu-panel .account {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(138, 116, 88, 0.18);
+}
+/* keep the migration-bridge nudge legible without its own standalone card */
+.menu-panel .account.account-import {
+  background: #FFF3E0;
+  box-shadow: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+/* Narrow screens only: keep the in-flow rail copies hidden so the widgets
+   render solely inside the dropdown (also avoids a pre-JS flash). Once auth.js
+   reparents them into #menu-panel these selectors no longer match. */
+@media (max-width: 859.98px) {
+  .topbar > .account,
+  .bottombar > .leaderboard { display: none; }
+}
+
 /* ---- leaderboard ------------------------------------------------------- */
 .leaderboard {
   display: flex;
@@ -505,4 +601,10 @@ body {
     overflow-y: auto;
   }
   .evolution { margin-top: 0; }
+
+  /* The hamburger + flyout are mobile-only: collapse the wrapper so .stats and
+     #account lay out exactly as before, and hide the dropdown entirely. */
+  .topbar-right { display: contents; }
+  .hamburger { display: none; }
+  .menu-panel { display: none; }
 }
