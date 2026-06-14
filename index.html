@@ -102,7 +102,13 @@
        strip the fragment so a refresh/bookmark can't replay or leak it. Inline +
        synchronous, ABOVE scores.js, so it runs even if a stale service worker is
        serving a cached scores.js, and the localStorage stash survives the SW
-       controllerchange reload. -->
+       controllerchange reload.
+
+       If the bridge also passed &confirm=1, the score is now durably stored on
+       this origin (we stashed it above) — so we bounce ONCE back to the old origin
+       with #migrated=N to let it set its "migrated" flag only on real success. The
+       score is already safe here, so even if the user never returns, nothing is
+       lost; the old origin's read-both + never-delete guards still cover them. -->
   <script>
     (function () {
       try {
@@ -110,8 +116,15 @@
         var raw = p.get("import_best");
         if (raw == null) return;
         var n = Math.floor(Number(raw));
-        if (isFinite(n) && n > 0 && n <= 100000000) {
+        var valid = isFinite(n) && n > 0 && n <= 100000000;
+        if (valid) {
           localStorage.setItem("shibka_import_best", String(n));
+        }
+        if (valid && p.get("confirm") === "1") {
+          // Durably received -> confirm back to the old origin, then it forwards
+          // the user here again (without import_best) for the final landing.
+          location.replace("https://avegancafe.github.io/shibka/#migrated=" + n);
+          return;
         }
         // strip the fragment regardless of validity
         history.replaceState(null, "", location.pathname + location.search);

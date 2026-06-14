@@ -133,19 +133,33 @@ since deleted). Browsers that played there still hold an **anonymous best** in
 
 **How it works (no CORS, no backend change):** a tiny static page redeployed at
 the old origin reads `shibka_best` and redirects to
-`https://shibka.kyleholzinger.dev/#import_best=<n>` — handing the score off in a
-**URL fragment**, never a cross-origin request. The new site's inline reader (in
-`index.html`, above `js/scores.js`) stashes it under `shibka_import_best`, and
-`scores.js` folds it into the offline queue via `record()` (GREATEST-idempotent —
-a lower import is dropped). It reaches the DB the same way any guest score does:
-when the player signs in, `auth.js`'s `flushScores()` posts it. A guest whose best
-was actually raised gets a one-time "claim it on the leaderboard" nudge.
+`https://shibka.kyleholzinger.dev/#import_best=<n>&confirm=1` — handing the score
+off in a **URL fragment**, never a cross-origin request. The new site's inline
+reader (in `index.html`, above `js/scores.js`) stashes it under `shibka_import_best`
+(durably on the new origin now), and `scores.js` folds it into the offline queue
+via `record()` (GREATEST-idempotent — a lower import is dropped). It reaches the DB
+the same way any guest score does: when the player signs in, `auth.js`'s
+`flushScores()` posts it. A guest whose best was actually raised gets a one-time
+"claim it on the leaderboard" nudge.
+
+**Confirmed-migration round-trip (the `shibka_migrated` flag):** because the old
+origin can't see the new origin's storage, the new reader — when it sees
+`&confirm=1` — bounces **once** back to `…/avegancafe.github.io/shibka/#migrated=<n>`.
+The bridge sets a `localStorage["shibka_migrated"]` flag **only** when that
+confirmation arrives *and* its current `readBest()` is ≤ the confirmed `<n>` (so a
+tampered/low confirmation can't strand a higher real score — it re-migrates
+instead), then forwards the user to the new site. Once flagged, future visits show
+only the lightweight "moved" UI and never re-attempt the import. (We deliberately
+do **not** use the old `shibka_handoff_done` flag for this — it marked a mere
+*attempt*.) Net per-device flow on first migration: old → new (stash) → old (flag) →
+new (land); ~3–4s, one-time.
 
 Bridge source lives at **`deploy/ghpages-bridge/index.html`** (it ships **no**
 service worker, and clears only Shibka's own SW/caches — scope `/shibka`, cache
 prefix `shibka-` — so it can't disturb other projects on the shared `github.io`
-origin). It **never deletes** `shibka_best`: there's no cross-origin ack that the
-handoff landed, and re-handing-off the same value is idempotent.
+origin). It **never deletes** `shibka_best` (re-handing-off the same value is
+idempotent), so even if the confirmation never completes, the score is safe and
+re-migrates on a later visit.
 
 **Deploy — ORDER MATTERS:**
 1. Ship the new-site half first: merge this work to `main` so the inline reader +
