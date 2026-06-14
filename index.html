@@ -32,7 +32,7 @@
   <meta name="twitter:description" content="All roads lead to Shiba — a dog-breed take on the Suika / Watermelon merge game." />
   <meta name="twitter:image" content="https://shibka.kyleholzinger.dev/assets/social-preview.png" />
 
-  <link rel="stylesheet" href="css/style.css?v=14" />
+  <link rel="stylesheet" href="css/style.css?v=15" />
 </head>
 <body>
   <header class="dedication">To the best fiancée in the world, Elise 💚</header>
@@ -63,9 +63,12 @@
         </div>
       </div>
 
-      <!-- Mobile flyout: below 860px auth.js relocates #account and #leaderboard
-           in here; at/above 860px it restores them to their rail homes. -->
-      <div id="menu-panel" class="menu-panel hidden" aria-label="Account and leaderboard"></div>
+      <!-- Mobile flyout: below 860px auth.js moves #account in here (above this
+           link); at/above 860px it returns the account to the left rail. The full
+           leaderboard is not embedded here — it has its own page (/leaderboard). -->
+      <div id="menu-panel" class="menu-panel hidden" aria-label="Account menu">
+        <a class="menu-link" href="/leaderboard">🏆 Full leaderboard →</a>
+      </div>
 
       <!-- Account widget (login state, profile, logout) — filled by auth.js.
            Desktop home: the left rail; on mobile it moves into #menu-panel. -->
@@ -86,6 +89,18 @@
     </div>
 
     <footer class="bottombar">
+      <!-- Compact top-5, shown directly under the board on mobile only. The full
+           board is the desktop right rail + the dedicated /leaderboard page. -->
+      <section class="top5" id="top5" aria-label="Top players">
+        <div class="top5-head">
+          <span class="lb-title">Leaderboard</span>
+          <a class="top5-more" href="/leaderboard">Full leaderboard →</a>
+        </div>
+        <ol class="lb-list top5-list" id="top5-list">
+          <li class="lb-empty">Loading…</li>
+        </ol>
+      </section>
+
       <div class="next">
         <span class="next-label">Next up</span>
         <span id="next-dog" class="next-dog"></span>
@@ -94,7 +109,10 @@
 
       <!-- Global leaderboard — filled by auth.js (best score per display name) -->
       <section class="leaderboard" id="leaderboard">
-        <span class="lb-title">Leaderboard</span>
+        <div class="lb-head">
+          <span class="lb-title">Leaderboard</span>
+          <a class="lb-more" href="/leaderboard">Search / full →</a>
+        </div>
         <ol class="lb-list" id="leaderboard-list">
           <li class="lb-empty">Loading…</li>
         </ol>
@@ -149,13 +167,13 @@
   </script>
 
   <script src="vendor/matter.min.js"></script>
-  <script src="js/dogs.js?v=14"></script>
+  <script src="js/dogs.js?v=15"></script>
   <!-- Offline score queue: must load before game.js (seeds the displayed best)
        and auth.js (flushes it to the server). Also consumes the bridge import
        stashed by the inline reader above. -->
-  <script src="js/scores.js?v=14"></script>
-  <script src="js/game.js?v=14"></script>
-  <script src="js/auth.js?v=14"></script>
+  <script src="js/scores.js?v=15"></script>
+  <script src="js/game.js?v=15"></script>
+  <script src="js/auth.js?v=15"></script>
 
   <script>
     // Register the service worker for offline play + home-screen install, and

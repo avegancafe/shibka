@@ -317,21 +317,43 @@ api.post("/score", requireAuth, async (req, res, next) => {
 api.get("/leaderboard", async (req, res, next) => {
   try {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const page = Math.min(1_000_000, Math.max(1, parseInt(req.query.page, 10) || 1));
+    const offset = (page - 1) * limit;
+    // Literal substring search on display name. We escape the ILIKE wildcards
+    // (% _ \) so a user typing them gets a literal match instead of wildcard
+    // behavior — the value is still BOUND ($1), so this is only about match
+    // semantics, never SQL injection.
+    const rawQ = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 50) : "";
+    const q = rawQ.replace(/([\\%_])/g, "\\$1");
+
+    // rank() over the whole field gives a GLOBAL competition rank (ties share a
+    // rank), so a searched/paginated row still shows its true standing. The outer
+    // ORDER BY adds updated_at as a stable tiebreaker for display only.
     const { rows } = await db.query(
-      `SELECT display_name, best_score FROM users
-       WHERE best_score > 0
+      `SELECT display_name, best_score, rank FROM (
+         SELECT display_name, best_score, updated_at,
+                rank() OVER (ORDER BY best_score DESC) AS rank
+         FROM users WHERE best_score > 0
+       ) ranked
+       WHERE ($1 = '' OR display_name ILIKE '%' || $1 || '%' ESCAPE '\\')
        ORDER BY best_score DESC, updated_at ASC
-       LIMIT $1`,
-      [limit]
+       LIMIT $2 OFFSET $3`,
+      [q, limit, offset]
     );
-    const leaderboard = rows.map((r, idx) => ({
-      rank: idx + 1,
+    const { rows: cnt } = await db.query(
+      `SELECT count(*)::int AS total FROM users
+       WHERE best_score > 0 AND ($1 = '' OR display_name ILIKE '%' || $1 || '%' ESCAPE '\\')`,
+      [q]
+    );
+    const total = cnt[0] ? cnt[0].total : 0;
+    const leaderboard = rows.map((r) => ({
+      rank: Number(r.rank),
       displayName: r.display_name,
       best: r.best_score,
     }));
 
     // If signed in, also report this player's standing (handy when they're not
-    // in the visible top-N).
+    // on the visible page).
     let me = null;
     const user = await currentUser(req);
     if (user) {
@@ -346,7 +368,7 @@ api.get("/leaderboard", async (req, res, next) => {
       me = { displayName: user.display_name, best: user.best_score, rank };
     }
 
-    res.json({ leaderboard, me });
+    res.json({ leaderboard, total, page, limit, me });
   } catch (err) {
     next(err);
   }

@@ -28,8 +28,9 @@
   // ---- state ---------------------------------------------------------------
   let me = null; // { username, displayName, best } when signed in
   const accountEl = document.getElementById("account");
-  const lbListEl = document.getElementById("leaderboard-list");
+  const lbListEl = document.getElementById("leaderboard-list"); // full board (desktop rail)
   const lbMeEl = document.getElementById("leaderboard-me");
+  const top5ListEl = document.getElementById("top5-list"); // compact top-5 (mobile, under board)
 
   // TEMPORARY (migration bridge): when a score handed off from the old origin
   // actually raised a *guest's* best, we highlight the account widget to invite
@@ -367,44 +368,44 @@
 
   // ---- leaderboard ---------------------------------------------------------
   async function loadLeaderboard() {
-    if (!lbListEl) return;
+    if (!lbListEl && !top5ListEl) return;
     try {
       const { leaderboard, me: standing } = await api("/leaderboard");
       renderLeaderboard(leaderboard, standing);
     } catch (_) {
-      lbListEl.innerHTML = '<li class="lb-empty">Leaderboard unavailable offline.</li>';
+      const offline = '<li class="lb-empty">Leaderboard unavailable offline.</li>';
+      if (lbListEl) lbListEl.innerHTML = offline;
+      if (top5ListEl) top5ListEl.innerHTML = offline;
       if (lbMeEl) lbMeEl.textContent = "";
     }
   }
+  function rowHtml(r, standing, mineName) {
+    const mine = mineName && r.displayName === mineName && standing && r.rank === standing.rank;
+    return (
+      '<li class="lb-row' + (mine ? " lb-mine" : "") + '">' +
+      '<span class="lb-rank">' + r.rank + "</span>" +
+      '<span class="lb-name">' + esc(r.displayName) + "</span>" +
+      '<span class="lb-score">' + r.best.toLocaleString() + "</span></li>"
+    );
+  }
+  // The full board (desktop rail) shows every fetched row; the mobile top-5 strip
+  // shows just the first five. Both come from the one /leaderboard fetch.
   function renderLeaderboard(rows, standing) {
-    lbListEl.innerHTML = "";
-    if (!rows || !rows.length) {
-      lbListEl.innerHTML = '<li class="lb-empty">No scores yet — be the first!</li>';
-    } else {
-      const mineName = me && me.displayName;
-      for (const r of rows) {
-        const li = document.createElement("li");
-        li.className = "lb-row";
-        if (mineName && r.displayName === mineName && standing && r.rank === standing.rank) {
-          li.classList.add("lb-mine");
-        }
-        li.innerHTML =
-          '<span class="lb-rank">' +
-          r.rank +
-          '</span><span class="lb-name">' +
-          esc(r.displayName) +
-          '</span><span class="lb-score">' +
-          r.best.toLocaleString() +
-          "</span>";
-        lbListEl.appendChild(li);
-      }
-    }
+    const mineName = me && me.displayName;
+    const fill = (el, list) => {
+      if (!el) return;
+      el.innerHTML =
+        list && list.length
+          ? list.map((r) => rowHtml(r, standing, mineName)).join("")
+          : '<li class="lb-empty">No scores yet — be the first!</li>';
+    };
+    fill(lbListEl, rows);
+    fill(top5ListEl, rows ? rows.slice(0, 5) : rows);
     if (lbMeEl) {
-      if (standing && standing.rank && !inTop(rows, standing.rank)) {
-        lbMeEl.textContent = "You: #" + standing.rank + " · " + standing.best.toLocaleString();
-      } else {
-        lbMeEl.textContent = "";
-      }
+      lbMeEl.textContent =
+        standing && standing.rank && !inTop(rows, standing.rank)
+          ? "You: #" + standing.rank + " · " + standing.best.toLocaleString()
+          : "";
     }
   }
   function inTop(rows, rank) {
@@ -435,32 +436,29 @@
   window.addEventListener("online", flushScores);
 
   // ---- menu-bar dropdown (mobile) -----------------------------------------
-  // On narrow screens the account widget + leaderboard live behind a hamburger
-  // in the menu bar; on wide screens they stay in their rails (the desktop
-  // layout is unchanged). We relocate the SAME nodes — ids preserved, so every
-  // render/sync path above is unaffected — between #menu-panel and their home
-  // positions as the viewport crosses the 860px breakpoint.
+  // On narrow screens the account widget lives behind the hamburger; on wide
+  // screens it stays in the left rail (desktop layout unchanged). We move the
+  // SAME #account node — id preserved, so every render/sync path above is
+  // unaffected — into #menu-panel (above its static "Full leaderboard" link) on
+  // mobile, and back to its home on desktop. The leaderboard is NOT in the menu:
+  // mobile shows the top-5 strip under the board + the full-board link; desktop
+  // keeps the full board in the right rail.
   const menuToggle = document.getElementById("menu-toggle");
   const menuPanel = document.getElementById("menu-panel");
-  const lbSection = document.getElementById("leaderboard");
   const mobileMQ = window.matchMedia("(max-width: 859.98px)");
 
   function homeOf(el) {
     return el ? { parent: el.parentNode, next: el.nextSibling } : null;
   }
   const accountHome = homeOf(accountEl);
-  const lbHome = homeOf(lbSection);
 
-  // Move the widgets into the dropdown on mobile; restore them to their rail
-  // homes on desktop. Idempotent — safe to call on every breakpoint change.
+  // Idempotent — safe to call on every breakpoint change.
   function placeWidgets(isMobile) {
-    if (!menuPanel) return;
+    if (!menuPanel || !accountEl) return;
     if (isMobile) {
-      if (accountEl) menuPanel.appendChild(accountEl);
-      if (lbSection) menuPanel.appendChild(lbSection);
+      menuPanel.insertBefore(accountEl, menuPanel.firstChild); // account above the link
     } else {
-      if (accountEl && accountHome) accountHome.parent.insertBefore(accountEl, accountHome.next);
-      if (lbSection && lbHome) lbHome.parent.insertBefore(lbSection, lbHome.next);
+      if (accountHome) accountHome.parent.insertBefore(accountEl, accountHome.next);
       closeMenu();
     }
   }
