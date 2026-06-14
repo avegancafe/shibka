@@ -18,6 +18,16 @@ pups into the bin; two of the same breed merge into the next breed up. The goal
   sync, and the leaderboard (`npm` only for the server). Data lives in **Neon
   Postgres** (project `Shibka`, pooled connection). See `DEPLOY.md`.
 
+## Issue tracking (beads)
+
+Work here is tracked in **beads** (`bd`); issue IDs are prefixed `shibka-` (epics
+like `shibka-3zu` with `.N` children). The embedded-Dolt workspace lives in `.beads/`
+in the **main checkout** (untracked). Running `bd` from a Claude Code worktree
+(`.claude/worktrees/<name>/`) just works — the path is nested under the repo root, so
+`bd` resolves the same workspace; only a worktree *outside* the repo needs
+`bd -C <main-checkout>`. See the **`shibka-beads`** skill for the full repo
+conventions, the `shibka-`/`.N` ID structure, and the setup checks.
+
 ## Golden rules (don't break these)
 
 1. **Gameplay must work fully offline / with no runtime network.** matter-js is

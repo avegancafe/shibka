@@ -3,7 +3,7 @@
 // Serves the static game (repo root) AND a small JSON API for accounts,
 // best-score persistence, and a global leaderboard. Auth is a stateless,
 // HMAC-signed session token in an httpOnly cookie; passwords are hashed with
-// Node's built-in scrypt (no native build deps). Sits behind nginx, which
+// Node's built-in scrypt (no native build deps). Sits behind Caddy, which
 // terminates TLS and proxies to PORT.
 "use strict";
 
@@ -30,8 +30,24 @@ if (!SESSION_SECRET || SESSION_SECRET.length < 16) {
 
 const app = express();
 app.disable("x-powered-by");
-app.set("trust proxy", 1); // we run behind nginx; trust X-Forwarded-* for req.ip / secure
+app.set("trust proxy", 1); // we run behind Caddy; trust X-Forwarded-* for req.ip / secure
 app.use(express.json({ limit: "8kb" }));
+
+// ---- security headers ------------------------------------------------------
+// CSP + Permissions-Policy on every response. The game has two inline <script>
+// blocks (SW registration + the migration bridge) and sets inline canvas styles,
+// so script-src/style-src need 'unsafe-inline'; everything is same-origin (no
+// external origins). We intentionally do NOT set HSTS / X-Frame-Options /
+// X-Content-Type-Options / Referrer-Policy here — the production Caddy edge
+// already sets those, and duplicating them risks conflicts.
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"
+  );
+  res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=(), usb=()");
+  next();
+});
 
 // ---- passwords (scrypt) ---------------------------------------------------
 async function hashPassword(pw) {
@@ -52,6 +68,13 @@ async function verifyPassword(pw, stored) {
   }
   return key.length === test.length && crypto.timingSafeEqual(key, test);
 }
+
+// Constant-time login: when the username doesn't exist we still run a scrypt
+// verification against this dummy hash so response timing can't reveal whether
+// a username is registered. Seeded with a valid scrypt$salt$key shape, then
+// replaced by a real hash once startup hashing finishes.
+let DUMMY_HASH = `scrypt$${crypto.randomBytes(16).toString("hex")}$${crypto.randomBytes(64).toString("hex")}`;
+hashPassword(crypto.randomBytes(18).toString("hex")).then((h) => { DUMMY_HASH = h; }).catch(() => {});
 
 // ---- session token (HMAC-signed cookie) -----------------------------------
 function signToken(payload) {
@@ -85,7 +108,7 @@ function setSession(res, uid) {
   // use a numeric uid, so coerce here. Safe for ids below 2^53.
   res.cookie(COOKIE, signToken({ uid: Number(uid), exp }), {
     httpOnly: true,
-    secure: PROD, // requires HTTPS in production (nginx terminates TLS)
+    secure: PROD, // requires HTTPS in production (Caddy terminates TLS)
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_TTL_S * 1000,
@@ -212,7 +235,7 @@ api.post("/login", rateLimit(20, 15 * 60 * 1000), async (req, res, next) => {
       [username]
     );
     const user = rows[0];
-    const ok = user && (await verifyPassword(password, user.password_hash));
+    const ok = (await verifyPassword(password, user ? user.password_hash : DUMMY_HASH)) && Boolean(user);
     if (!ok) return res.status(401).json({ error: "Wrong username or password." });
     setSession(res, user.id);
     res.json({ user: publicUser(user) });

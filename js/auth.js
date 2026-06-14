@@ -166,6 +166,7 @@
     return modalRoot;
   }
   function openModal(node) {
+    closeMenu(); // never stack the dropdown behind the auth/profile modal
     const root = ensureModalRoot();
     root.innerHTML = "";
     root.appendChild(node);
@@ -433,6 +434,70 @@
   // When connectivity returns, drain anything that piled up while offline.
   window.addEventListener("online", flushScores);
 
+  // ---- menu-bar dropdown (mobile) -----------------------------------------
+  // On narrow screens the account widget + leaderboard live behind a hamburger
+  // in the menu bar; on wide screens they stay in their rails (the desktop
+  // layout is unchanged). We relocate the SAME nodes — ids preserved, so every
+  // render/sync path above is unaffected — between #menu-panel and their home
+  // positions as the viewport crosses the 860px breakpoint.
+  const menuToggle = document.getElementById("menu-toggle");
+  const menuPanel = document.getElementById("menu-panel");
+  const lbSection = document.getElementById("leaderboard");
+  const mobileMQ = window.matchMedia("(max-width: 859.98px)");
+
+  function homeOf(el) {
+    return el ? { parent: el.parentNode, next: el.nextSibling } : null;
+  }
+  const accountHome = homeOf(accountEl);
+  const lbHome = homeOf(lbSection);
+
+  // Move the widgets into the dropdown on mobile; restore them to their rail
+  // homes on desktop. Idempotent — safe to call on every breakpoint change.
+  function placeWidgets(isMobile) {
+    if (!menuPanel) return;
+    if (isMobile) {
+      if (accountEl) menuPanel.appendChild(accountEl);
+      if (lbSection) menuPanel.appendChild(lbSection);
+    } else {
+      if (accountEl && accountHome) accountHome.parent.insertBefore(accountEl, accountHome.next);
+      if (lbSection && lbHome) lbHome.parent.insertBefore(lbSection, lbHome.next);
+      closeMenu();
+    }
+  }
+
+  let menuOpen = false;
+  function openMenu() {
+    if (!menuPanel || menuOpen) return;
+    menuOpen = true;
+    menuPanel.classList.remove("hidden");
+    if (menuToggle) menuToggle.setAttribute("aria-expanded", "true");
+    loadLeaderboard(); // refresh the board each time it is revealed
+    document.addEventListener("mousedown", onOutsideDown, true);
+  }
+  function closeMenu() {
+    if (!menuPanel || !menuOpen) return;
+    menuOpen = false;
+    menuPanel.classList.add("hidden");
+    if (menuToggle) menuToggle.setAttribute("aria-expanded", "false");
+    document.removeEventListener("mousedown", onOutsideDown, true);
+  }
+  function onOutsideDown(e) {
+    if (menuPanel.contains(e.target) || (menuToggle && menuToggle.contains(e.target))) return;
+    closeMenu();
+  }
+
+  function setupMenu() {
+    if (!menuToggle || !menuPanel) return;
+    placeWidgets(mobileMQ.matches);
+    const onMQ = (e) => placeWidgets(e.matches);
+    if (mobileMQ.addEventListener) mobileMQ.addEventListener("change", onMQ);
+    else if (mobileMQ.addListener) mobileMQ.addListener(onMQ); // older Safari
+    menuToggle.addEventListener("click", () => (menuOpen ? closeMenu() : openMenu()));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeMenu();
+    });
+  }
+
   // ---- boot ----------------------------------------------------------------
   async function boot() {
     renderAccount(); // show the logged-out widget immediately (works offline)
@@ -451,5 +516,6 @@
     maybeImportNudge(); // after `me` is resolved (migration bridge)
   }
 
+  setupMenu();
   boot();
 })();
