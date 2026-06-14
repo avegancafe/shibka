@@ -12,7 +12,7 @@
 // VERSION only controls the *offline snapshot* cache name; bump it if you change
 // the ASSETS list or want to force-evict old caches. Day-to-day content updates
 // flow automatically without touching it.
-const VERSION = "v13";
+const VERSION = "v14";
 const CACHE = "shibka-" + VERSION;
 
 // Relative URLs so this works at the domain root (localhost) and under a
