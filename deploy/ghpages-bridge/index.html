@@ -82,11 +82,27 @@
       var NEW_URL = "https://shibka.kyleholzinger.dev/";
       var MAX = 100000000;
 
+      function clamp(v) {
+        var n = Math.floor(Number(v) || 0);
+        return isFinite(n) && n > 0 && n <= MAX ? n : 0;
+      }
       function readBest() {
+        var best = 0;
+        // Legacy key written by the old game.
+        try { best = Math.max(best, clamp(localStorage.getItem("shibka_best"))); } catch (e) {}
+        // Defensive: if the NEW game ever ran on this origin (e.g. GitHub Pages
+        // briefly served it from `main` before this bridge took over), its
+        // migrate() folded shibka_best into the shibka_scores queue and deleted
+        // the legacy key. Recover the max from there too, so no score is lost.
         try {
-          var n = Math.floor(Number(localStorage.getItem("shibka_best")) || 0);
-          return isFinite(n) && n > 0 && n <= MAX ? n : 0;
-        } catch (e) { return 0; }
+          var arr = JSON.parse(localStorage.getItem("shibka_scores") || "[]");
+          if (Array.isArray(arr)) {
+            for (var i = 0; i < arr.length; i++) {
+              if (arr[i] && typeof arr[i].score === "number") best = Math.max(best, clamp(arr[i].score));
+            }
+          }
+        } catch (e) {}
+        return best;
       }
 
       function target(best) {
