@@ -189,18 +189,41 @@ The installed app is meant to be a **live copy of the latest deploy**.
 
 ## Local development
 
-The **game alone** can still be served statically (`python3 -m http.server 8000`)
-if you're only touching gameplay/CSS — the account UI just shows logged-out and
-the leaderboard reads "unavailable". For the **full app** (accounts/leaderboard)
-run the backend against a local Postgres:
+The **game alone** can be served statically (`python3 -m http.server 8000`) if
+you're only touching gameplay/CSS — the account UI just shows logged-out and the
+leaderboard reads "unavailable". For anything touching the **backend** (accounts,
+best-score sync, the leaderboard + its search/pagination) you need Postgres, and
+the easiest way is **docker compose** (`docker-compose.yml` is local-dev only;
+prod uses `deploy/` + Neon).
+
+### Testing locally with docker compose
+
+Two ways to bring up a local DB-backed stack:
 
 ```bash
-docker compose up -d db          # local Postgres (Docker)
+# A) DB in Docker, Node on your host (fast iteration — recommended)
+docker compose up -d db            # just Postgres: the always-on `db` service on :5432
 cd server && npm install
 export DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka PGSSL=disable SESSION_SECRET=dev-secret
-npm run migrate && npm run dev   # open http://localhost:3000
-# ...or the whole stack in Docker:  docker compose --profile full up
+npm run migrate && npm run dev     # serves the game + /api on http://localhost:3000
+
+# B) whole stack in Docker (one command, no host Node)
+docker compose --profile full up   # Postgres + the Node `app` service together
 ```
+
+Confirm it's healthy: `curl -s localhost:3000/healthz` → `{"ok":true}`. Creds are
+`shibka:shibka` / db `shibka` (see `docker-compose.yml`); `schema.sql` + `migrate.js`
+are idempotent so re-running migrate is safe. Tear down with `docker compose down`
+(add `-v` to also drop the `shibka_pgdata` volume for a clean DB).
+
+> **DB-backed QA needs this.** The account widget, the best-score `POST`, and the
+> whole leaderboard (top-5 strip, the desktop board, and the `/leaderboard`
+> search/pagination) all hit `/api/*`, which requires Postgres. With no DB those
+> endpoints `500`, so spin up the compose `db` before QA-ing those flows — and note
+> `/api/me` only returns `200 {user:null}` when the backend is actually up. If
+> Docker isn't available you can still QA the **layout/markup** statically, but
+> verify the **data flow** against a real DB (compose locally, or against the
+> deployed site).
 
 Service workers also run on `localhost` (a secure context). **Gotcha:** when
 iterating, an old SW can serve a stale cached file. If a change isn't showing,
