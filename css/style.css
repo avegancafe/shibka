@@ -297,6 +297,26 @@ body {
 }
 .account-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* Migration-bridge nudge: highlight the account widget when a score imported
+   from the old site is waiting to be claimed on the leaderboard. TEMPORARY —
+   remove together with the avegancafe.github.io bridge (see DEPLOY.md). */
+.account.account-import {
+  background: #FFF3E0;
+  box-shadow: 0 0 0 2px var(--accent), 0 3px 10px rgba(120, 90, 50, 0.18);
+}
+.account.account-import .account-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.account.account-import .account-label strong {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.account-import-dismiss { align-self: flex-start; font-size: 11px; }
+
 .btn-mini {
   background: var(--accent);
   color: #fff;

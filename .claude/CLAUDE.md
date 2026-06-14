@@ -48,11 +48,12 @@ pups into the bin; two of the same breed merge into the next breed up. The goal
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Markup, stable DOM hooks, PWA `<meta>`/manifest links, SW registration, dedication banner. Also the `#account` widget + `#leaderboard` containers (filled by `auth.js`). Loads `js/auth.js`. |
+| `index.html` | Markup, stable DOM hooks, PWA `<meta>`/manifest links, SW registration, dedication banner. Also the `#account` widget + `#leaderboard` containers (filled by `auth.js`). Loads `js/scores.js` **before** `js/game.js` (game seeds its best from the queue) and `js/auth.js`. |
 | `css/style.css` | Palette (CSS vars), layout. **Responsive:** mobile = stacked column; desktop (`min-width: 860px`) = 3 columns (stats **+ account** left, board center, next/**leaderboard**/evolution right). `.topbar-row` wraps logo+stats so the account widget can stack beneath. Also the account, leaderboard, and auth-modal styles. |
 | `js/dogs.js` | `LEVELS` breed data + the parametric `drawDogFace()` renderer + offscreen sprite cache (`getSprite`). Exposed as `window.SHIBKA_DOGS`. |
-| `js/game.js` | matter-js engine, input, drop + merge logic, game-over, scoring, `fitCanvas` (responsive scaling), the evolution ring, and the `window.__SHIBKA` hooks. On game over it dispatches a `shibka:gameover` CustomEvent (`{score, best}`); `__SHIBKA.setBest(n)` raises the displayed best (used by the account sync). |
-| `js/auth.js` | **Account layer** (progressive enhancement). Account widget (login/signup/profile/logout), best-score sync (`POST /api/score` on `shibka:gameover`, reconcile local best on login via `__SHIBKA.setBest`), and the leaderboard. All `/api` calls degrade gracefully offline. |
+| `js/scores.js` | **Offline score queue** (`window.SHIBKA_SCORES`) — the *local source of truth* for the best score. A durable `localStorage` array (`shibka_scores`) of completed runs (`{score, at, synced}`), kept compacted to ≤2 entries. A guest's displayed best is `best()` (max over the queue, even offline); `pendingMax()` is the highest run not yet accepted by the server. One-time migration folds the legacy `shibka_best` value in as an unsynced run, then deletes that key. Local-only (never touches the network) — flushing is `auth.js`'s job. Must load before `game.js`. |
+| `js/game.js` | matter-js engine, input, drop + merge logic, game-over, scoring, `fitCanvas` (responsive scaling), the evolution ring, and the `window.__SHIBKA` hooks. Seeds its displayed `best` from `SHIBKA_SCORES.best()` and records new highs via `SHIBKA_SCORES.record()` (no more bare `shibka_best`). On game over it dispatches a `shibka:gameover` CustomEvent (`{score, best}`); `__SHIBKA.setBest(n)` raises the displayed best and pins it in the queue (`adoptServerBest`, used by the account sync). |
+| `js/auth.js` | **Account layer** (progressive enhancement). Account widget (login/signup/profile/logout), the leaderboard, and `flushScores()` — drains the offline queue (`POST /api/score` with the highest pending run; server does `GREATEST`) on `shibka:gameover`, the `online` event, login (`onAuthenticated`), and boot. All `/api` calls degrade gracefully offline; unsent runs stay queued and retry. |
 | `vendor/matter.min.js` | matter-js 0.20.0, vendored. Don't swap for a CDN. |
 | `manifest.webmanifest` | PWA manifest (standalone, Shiba icons, theme colors). |
 | `sw.js` | Service worker — network-first + offline precache. **Skips `/api/*` + `/healthz`** (never cached — a stale `/api/me` would show the wrong login state). |
@@ -121,7 +122,12 @@ the icons + favicon. Then bump `VERSION` in `sw.js`. Use the
   big bonus (no new dog).
 - **Game over:** a dog whose top edge sits above the danger line (`DANGER_Y`) for
   `GAMEOVER_GRACE` (2s) ends the game. Fast-falling dogs mid-drop are ignored.
-- **Score** persists best in `localStorage` (`shibka_best`).
+- **Score** persists best via the **offline score queue** (`js/scores.js`,
+  `localStorage` key `shibka_scores`) — the local source of truth. `addScore`
+  records each new personal best into it; the displayed best is derived from it
+  (so it survives reloads offline). `auth.js` flushes the queue to the server when
+  signed in + online. The legacy `shibka_best` key is migrated in once, then
+  deleted — don't reintroduce it.
 - Tuning constants live at the top of `game.js` (`DROP_Y`, `DANGER_Y`,
   `DROP_COOLDOWN`, physics restitution/friction/etc.).
 
@@ -140,7 +146,7 @@ The installed app is meant to be a **live copy of the latest deploy**.
   change the `ASSETS` precache list or want to force every client to evict old
   caches.** Day-to-day content changes propagate automatically via network-first —
   you do *not* need to bump for every edit, but bumping on a release is safe and
-  cheap. (Currently `v11`.)
+  cheap. (Currently `v12`.)
 - `index.html` also carries `?v=N` on the css/js links as a belt-and-suspenders
   HTTP-cache bust; less critical now that the SW is network-first.
 - **Home-screen icon caveat:** the OS snapshots the icon at install time. Updating

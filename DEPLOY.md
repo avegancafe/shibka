@@ -124,3 +124,45 @@ curl -fsS https://shibka.kyleholzinger.dev/healthz
 
 **The PWA stays always-fresh** (network-first service worker), so clients pick up
 new deploys automatically; `/api/*` is never cached (see `sw.js`).
+
+## 4. Old-domain score bridge (TEMPORARY)
+
+The game used to live at `https://avegancafe.github.io/shibka/` (GitHub Pages,
+since deleted). Browsers that played there still hold an **anonymous best** in
+`localStorage["shibka_best"]` on that origin. The bridge recovers it.
+
+**How it works (no CORS, no backend change):** a tiny static page redeployed at
+the old origin reads `shibka_best` and redirects to
+`https://shibka.kyleholzinger.dev/#import_best=<n>` — handing the score off in a
+**URL fragment**, never a cross-origin request. The new site's inline reader (in
+`index.html`, above `js/scores.js`) stashes it under `shibka_import_best`, and
+`scores.js` folds it into the offline queue via `record()` (GREATEST-idempotent —
+a lower import is dropped). It reaches the DB the same way any guest score does:
+when the player signs in, `auth.js`'s `flushScores()` posts it. A guest whose best
+was actually raised gets a one-time "claim it on the leaderboard" nudge.
+
+Bridge source lives at **`deploy/ghpages-bridge/index.html`** (it ships **no**
+service worker, and clears only Shibka's own SW/caches — scope `/shibka`, cache
+prefix `shibka-` — so it can't disturb other projects on the shared `github.io`
+origin). It **never deletes** `shibka_best`: there's no cross-origin ack that the
+handoff landed, and re-handing-off the same value is idempotent.
+
+**Deploy — ORDER MATTERS:**
+1. Ship the new-site half first: merge this work to `main` so the inline reader +
+   `scores.js` consumer are live on `shibka.kyleholzinger.dev` (normal EC2 deploy).
+2. Publish the bridge to a **`gh-pages` branch** (orphan; root = the bridge
+   `index.html`). Push `gh-pages` **before** touching repo Settings.
+3. In repo **Settings → Pages → Source = "Deploy from a branch", Branch =
+   `gh-pages` / `(root)`**, HTTPS enforced. (Flipping the toggle *before* the
+   branch exists silently won't build.) Keep Pages on "Deploy from a branch" so it
+   can't drift to an Actions workflow that runs on `main`.
+   *(The `gh-pages` branch never triggers the EC2 deploy — that's `push: [main]`.)*
+
+Verify: visit `https://avegancafe.github.io/shibka/` with a seeded `shibka_best`;
+it should land on the new site with the score in the header.
+
+**Teardown (~6–12 months out, when the long tail dries up):** delete the
+`gh-pages` branch + set Settings → Pages → Source = **None**, then remove the
+new-site import code (the inline reader in `index.html`, the `IMPORT_KEY`
+consumer + `importInfo()` in `js/scores.js`, the import nudge in `js/auth.js`, and
+the `.account-import` CSS). All of it is commented **TEMPORARY**. Owner: Kyle.

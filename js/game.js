@@ -86,7 +86,11 @@
   // ---- engine ---------------------------------------------------------------
   let engine, world;
   let score = 0;
-  let best = Number(localStorage.getItem("shibka_best") || 0);
+  // The displayed best is derived from the offline score queue (scores.js) — the
+  // local source of truth that also carries any not-yet-synced runs and folded in
+  // the legacy `shibka_best`. Falls back to 0 if scores.js somehow isn't loaded.
+  const SCORES = window.SHIBKA_SCORES;
+  let best = SCORES ? SCORES.best() : 0;
   let gameOver = false;
   // Two-dog queue, like the original: heldLevel is the dog you aim with at the
   // top, nextLevel is the "on deck" dog previewed in the Next box.
@@ -229,7 +233,10 @@
     if (score > best) {
       best = score;
       bestEl.textContent = best;
-      localStorage.setItem("shibka_best", String(best));
+      // Persist the new personal best to the offline queue (local only — no
+      // network here; the account layer flushes it). Same write cadence as the
+      // old shibka_best, so a mid-game reload still keeps your best.
+      if (SCORES) SCORES.record(best);
     }
   }
 
@@ -609,7 +616,9 @@
       if (n > best) {
         best = n;
         bestEl.textContent = best;
-        localStorage.setItem("shibka_best", String(best));
+        // n is a server-confirmed best — pin it in the queue as a synced
+        // high-water so it persists for display and is never re-submitted.
+        if (SCORES) SCORES.adoptServerBest(n);
       }
       return best;
     },

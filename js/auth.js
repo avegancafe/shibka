@@ -31,9 +31,40 @@
   const lbListEl = document.getElementById("leaderboard-list");
   const lbMeEl = document.getElementById("leaderboard-me");
 
-  function localBest() {
-    return Number(localStorage.getItem("shibka_best") || 0);
+  // TEMPORARY (migration bridge): when a score handed off from the old origin
+  // actually raised a *guest's* best, we highlight the account widget to invite
+  // them to claim it on the leaderboard. Persistent + dismissible (not a toast).
+  let importNudgeActive = false;
+  let importNudgeDismissed = false;
+
+  // The offline score queue (scores.js) is the local source of truth for scores:
+  // it holds the player's best plus any runs not yet accepted by the server.
+  const SCORES = window.SHIBKA_SCORES;
+
+  // Drain the queue to the server. Only signed-in users have a destination, and
+  // only the highest pending run matters (the server folds it in with GREATEST),
+  // so one POST clears the queue. On failure it stays queued — retried on the
+  // `online` event, the next game over, and the next boot. A guard prevents the
+  // overlapping triggers from double-submitting.
+  let flushing = false;
+  async function flushScores() {
+    if (flushing || !me || !SCORES) return;
+    const pending = SCORES.pendingMax();
+    if (!pending) return;
+    flushing = true;
+    try {
+      const { best } = await api("/score", { method: "POST", body: { score: pending } });
+      SCORES.markSynced(pending, best);
+      me.best = best;
+      setGameBest(best);
+      loadLeaderboard();
+    } catch (_) {
+      // offline / server unreachable — the run stays queued for a later retry
+    } finally {
+      flushing = false;
+    }
   }
+
   function setGameBest(n) {
     if (window.__SHIBKA && typeof window.__SHIBKA.setBest === "function") {
       window.__SHIBKA.setBest(n);
@@ -64,9 +95,21 @@
       row.append(profile, logout);
       accountEl.append(who, row);
     } else {
+      const nudging = importNudgeActive && !importNudgeDismissed;
+      accountEl.classList.toggle("account-import", nudging);
       const label = document.createElement("span");
       label.className = "account-label";
-      label.textContent = "Save your best score";
+      if (nudging) {
+        // Quote the LIVE best (never the raw imported value) so the number is
+        // always the one actually showing in the header.
+        const b = SCORES ? SCORES.best() : 0;
+        label.innerHTML =
+          "🐾 Your best of <strong>" +
+          b.toLocaleString() +
+          "</strong> came over from the old site — create an account to claim your spot on the leaderboard.";
+      } else {
+        label.textContent = "Save your best score";
+      }
       const row = document.createElement("div");
       row.className = "account-actions";
       row.append(
@@ -74,7 +117,28 @@
         button("Sign up", "btn-mini btn-ghost", () => openAuth("signup"))
       );
       accountEl.append(label, row);
+      if (nudging) {
+        accountEl.append(
+          button("Maybe later", "linklike account-import-dismiss", () => {
+            importNudgeDismissed = true;
+            renderAccount();
+          })
+        );
+      }
     }
+  }
+
+  // TEMPORARY (migration bridge): surface the imported score once auth state is
+  // known. Only when the import actually raised the best — a lower import that
+  // record() dropped changes nothing, so we say nothing. Signed-in users already
+  // had it flushed to their account in onAuthenticated(), so stay quiet for them;
+  // only guests get the persistent claim nudge.
+  function maybeImportNudge() {
+    const info = SCORES && SCORES.importInfo && SCORES.importInfo();
+    if (!info || !info.raisedBest) return;
+    if (me) return; // already flushed to the account; header + leaderboard reflect it
+    importNudgeActive = true;
+    renderAccount();
   }
 
   function button(text, cls, onClick) {
@@ -349,30 +413,25 @@
   // ---- reconcile on auth + sync on game over -------------------------------
   async function onAuthenticated() {
     renderAccount();
-    // If a guest earned a higher best before logging in, push it up to the account.
-    const lb = localBest();
-    if (me && lb > me.best) {
-      try {
-        const { best } = await api("/score", { method: "POST", body: { score: lb } });
-        me.best = best;
-      } catch (_) {}
-    }
-    if (me) setGameBest(me.best); // reflect the account's best in the game header
+    // Reflect the account's best in the game header (raises display + pins it in
+    // the queue as a synced high-water; never lowers a higher locally-earned one).
+    if (me) setGameBest(me.best);
+    // Push any queued runs the guest earned before signing in up to the account.
+    await flushScores();
     loadLeaderboard();
   }
 
-  window.addEventListener("shibka:gameover", async (e) => {
+  window.addEventListener("shibka:gameover", (e) => {
     const score = e.detail && e.detail.score;
-    if (!me || typeof score !== "number") return;
-    try {
-      const { best } = await api("/score", { method: "POST", body: { score } });
-      me.best = best;
-      setGameBest(best);
-      loadLeaderboard();
-    } catch (_) {
-      // offline / not signed in — the localStorage best already holds it
-    }
+    // Always record the run locally first (durable even as a guest / offline);
+    // game.js already records new bests live, so this is idempotent. Then try to
+    // publish right away if we're signed in and online.
+    if (typeof score === "number" && SCORES) SCORES.record(score);
+    flushScores();
   });
+
+  // When connectivity returns, drain anything that piled up while offline.
+  window.addEventListener("online", flushScores);
 
   // ---- boot ----------------------------------------------------------------
   async function boot() {
@@ -389,6 +448,7 @@
       me = null;
       renderAccount();
     }
+    maybeImportNudge(); // after `me` is resolved (migration bridge)
   }
 
   boot();
