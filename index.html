@@ -65,6 +65,8 @@
       We found your old score (<span class="score" id="score">0</span>).
       We’ll bring it with you.
     </p>
+    <p id="confirmed" class="hide">✓ Your score is safe on the new Shibka. Taking you there…</p>
+    <p id="moved" class="hide">This game has moved. Taking you to the new Shibka…</p>
     <p id="no-score" class="hide">Taking you to the new Shibka…</p>
     <a class="go" id="go" href="https://shibka.kyleholzinger.dev/">Take me to the new Shibka →</a>
     <p class="small">Not redirected? <a id="go2" href="https://shibka.kyleholzinger.dev/">shibka.kyleholzinger.dev</a></p>
@@ -81,19 +83,22 @@
       "use strict";
       var NEW_URL = "https://shibka.kyleholzinger.dev/";
       var MAX = 100000000;
+      // Set ONLY after the new site confirms it durably received the score (or
+      // there was nothing to migrate). Once set, this page just shows the moved UI
+      // and stops re-attempting the import. Distinct from the old shibka_handoff_done
+      // flag, which marked a mere *attempt* — we no longer use that as the signal.
+      var MIGRATED_KEY = "shibka_migrated";
 
       function clamp(v) {
         var n = Math.floor(Number(v) || 0);
         return isFinite(n) && n > 0 && n <= MAX ? n : 0;
       }
+      // Highest stranded score on THIS origin — from the legacy key, or (if the new
+      // game ever ran here and its migrate() moved+deleted shibka_best) the
+      // shibka_scores queue. Never deleted, so re-reads/re-migrations stay safe.
       function readBest() {
         var best = 0;
-        // Legacy key written by the old game.
         try { best = Math.max(best, clamp(localStorage.getItem("shibka_best"))); } catch (e) {}
-        // Defensive: if the NEW game ever ran on this origin (e.g. GitHub Pages
-        // briefly served it from `main` before this bridge took over), its
-        // migrate() folded shibka_best into the shibka_scores queue and deleted
-        // the legacy key. Recover the max from there too, so no score is lost.
         try {
           var arr = JSON.parse(localStorage.getItem("shibka_scores") || "[]");
           if (Array.isArray(arr)) {
@@ -104,77 +109,100 @@
         } catch (e) {}
         return best;
       }
+      function isMigrated() { try { return localStorage.getItem(MIGRATED_KEY) === "1"; } catch (e) { return false; } }
+      function setMigrated() { try { localStorage.setItem(MIGRATED_KEY, "1"); } catch (e) {} }
+      function show(id) { var el = document.getElementById(id); if (el) el.classList.remove("hide"); }
 
+      // best>0 carries the score AND asks the new site to confirm receipt back to us
+      // (#confirm=1), so we set the migrated flag only once it has truly landed.
       function target(best) {
-        return best > 0 ? NEW_URL + "#import_best=" + best : NEW_URL;
+        return best > 0 ? NEW_URL + "#import_best=" + best + "&confirm=1" : NEW_URL;
       }
 
-      function withTimeout(promise, ms) {
-        return Promise.race([promise, new Promise(function (res) { setTimeout(res, ms); })]);
-      }
+      function withTimeout(p, ms) { return Promise.race([p, new Promise(function (r) { setTimeout(r, ms); })]); }
 
-      // Clear ONLY Shibka's stale SW + caches on this shared github.io origin.
+      // Clear ONLY Shibka's own stale SW + caches on this shared github.io origin.
       function cleanup() {
         var jobs = [];
         try {
           if ("serviceWorker" in navigator) {
-            jobs.push(
-              navigator.serviceWorker.getRegistrations().then(function (regs) {
-                return Promise.all(
-                  regs
-                    .filter(function (r) { return (r.scope || "").indexOf("/shibka") !== -1; })
-                    .map(function (r) { return r.unregister(); })
-                );
-              })
-            );
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs
+                .filter(function (r) { return (r.scope || "").indexOf("/shibka") !== -1; })
+                .map(function (r) { return r.unregister(); }));
+            }));
           }
         } catch (e) {}
         try {
           if (window.caches && caches.keys) {
-            jobs.push(
-              caches.keys().then(function (keys) {
-                return Promise.all(
-                  keys
-                    .filter(function (k) { return k.indexOf("shibka-") === 0; })
-                    .map(function (k) { return caches.delete(k); })
-                );
-              })
-            );
+            jobs.push(caches.keys().then(function (keys) {
+              return Promise.all(keys
+                .filter(function (k) { return k.indexOf("shibka-") === 0; })
+                .map(function (k) { return caches.delete(k); }));
+            }));
           }
         } catch (e) {}
         return Promise.all(jobs);
       }
 
       var navigated = false;
-      function go(best) {
+      function go(best, delay) {
         if (navigated) return;
         navigated = true;
-        // Cap the cleanup so a hung promise can't strand the user (~1s).
-        withTimeout(cleanup(), 1000).then(function () {
-          try { localStorage.setItem("shibka_handoff_done", "1"); } catch (e) {}
-          // Deliberately NOT removing shibka_best (idempotent re-handoff insurance).
-          location.replace(target(best));
-        });
+        var dest = target(best);
+        var a = document.getElementById("go"), a2 = document.getElementById("go2");
+        if (a) a.href = dest;
+        if (a2) a2.href = dest;
+        setTimeout(function () {
+          withTimeout(cleanup(), 1000).then(function () { location.replace(dest); });
+        }, delay || 0);
       }
 
-      var best = readBest();
-      var dest = target(best);
-      document.getElementById("go").href = dest;
-      document.getElementById("go2").href = dest;
-      document.getElementById("go").addEventListener("click", function (e) {
-        e.preventDefault();
-        go(best);
-      });
+      var params = new URLSearchParams(location.hash.slice(1));
+      var migParam = params.get("migrated");
 
+      // (1) Confirmation bounced back from the new site: it durably received `migVal`.
+      if (migParam !== null) {
+        var migVal = clamp(migParam);
+        var b1 = readBest();
+        history.replaceState(null, "", location.pathname + location.search);
+        if (b1 <= migVal) {
+          // Everything we hold is confirmed on the new origin -> safe to flag.
+          setMigrated();
+          show("confirmed");
+          go(0, 1200);            // forward to the new site as the final destination
+        } else {
+          // We still hold a higher score than was confirmed (tampered confirm, or
+          // the best grew between attempts) -> do NOT flag; re-migrate the real best.
+          var s = document.getElementById("score"); if (s) s.textContent = b1.toLocaleString();
+          show("with-score");
+          go(b1, 1600);
+        }
+        return;
+      }
+
+      // (2) Already confirmed-migrated on a prior visit -> just the lightweight moved UI.
+      if (isMigrated()) {
+        show("moved");
+        go(0, 1200);
+        return;
+      }
+
+      // (3) Not migrated yet -> attempt it.
+      var best = readBest();
       if (best > 0) {
-        document.getElementById("score").textContent = best.toLocaleString();
-        document.getElementById("with-score").classList.remove("hide");
-        // Give the player ~2.5s to read, then auto-advance (after cleanup).
-        setTimeout(function () { go(best); }, 2500);
+        var sc = document.getElementById("score"); if (sc) sc.textContent = best.toLocaleString();
+        show("with-score");
+        var dest = target(best);
+        var go1 = document.getElementById("go");
+        if (go1) { go1.href = dest; go1.addEventListener("click", function (e) { e.preventDefault(); go(best, 0); }); }
+        var go2 = document.getElementById("go2"); if (go2) go2.href = dest;
+        go(best, 2000);          // ~2s to read, then hand off + ask for confirmation
       } else {
-        // Nothing to carry — still clean up the dead PWA, then move on immediately.
-        document.getElementById("no-score").classList.remove("hide");
-        go(best);
+        // Nothing to migrate -> trivially done. Flag it and forward.
+        setMigrated();
+        show("no-score");
+        go(0, 600);
       }
     })();
   </script>
