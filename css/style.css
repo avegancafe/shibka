@@ -337,6 +337,18 @@ body {
   border: 1.5px solid rgba(242, 160, 61, 0.55);
 }
 
+/* Mid-run reset control. Compact (icon-only) in the tight mobile topbar row;
+   the "New game" label is revealed in the roomy desktop left rail (see the
+   min-width:860px block). */
+.reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.reset-icon { font-size: 16px; line-height: 1; }
+.reset-text { display: none; }
+
 /* ---- menu-bar hamburger + mobile flyout -------------------------------- */
 /* On narrow screens the account widget + leaderboard live behind a hamburger
    in the menu bar; auth.js relocates those same nodes into #menu-panel (and
@@ -684,6 +696,10 @@ body {
     gap: 10px;
   }
   .stat { min-width: 0; width: 100%; }
+  /* Roomy left rail: show the full label and let the button fill the column,
+     matching the stacked stat cards above it. */
+  .reset-btn { justify-content: center; width: 100%; padding-top: 9px; padding-bottom: 9px; }
+  .reset-text { display: inline; }
   .play-wrap { order: 2; }
   .bottombar {
     order: 3;
