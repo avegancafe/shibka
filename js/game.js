@@ -32,6 +32,7 @@
   const bestEl = document.getElementById("best");
   const nextEl = document.getElementById("next-dog");
   const restartBtn = document.getElementById("restart-button");
+  const resetBtn = document.getElementById("reset-button");
   const gameOverEl = document.getElementById("game-over");
   const finalScoreEl = document.getElementById("final-score");
 
@@ -570,6 +571,18 @@
   });
 
   restartBtn.addEventListener("click", reset);
+
+  // Mid-run reset (topbar). Confirm only when there's a live run worth losing —
+  // any score on the board that isn't already a finished game.
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      if (!gameOver && score > 0 &&
+          !window.confirm("Start a new game? Your current run will be lost.")) {
+        return;
+      }
+      reset();
+    });
+  }
 
   // ---- reset ----------------------------------------------------------------
   function reset() {
