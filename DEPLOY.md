@@ -1,182 +1,168 @@
-# Deploying Shibka (EC2 + Caddy + Neon + GitHub Actions)
+# Deploying Shibka (Cloudflare Workers + Neon + GitHub Actions)
 
-Shibka is no longer a static GitHub Pages site. It's a small **Express + Postgres**
-app: Node serves the static game **and** a JSON API (accounts, best-score sync,
-global leaderboard). It runs as a **Docker container** on the existing EC2 box
-(`avegancafe_bot_nemoclaw`, arm64), behind the shared **Caddy** reverse proxy
-(automatic Let's Encrypt TLS), with data in **Neon Postgres**. It auto-deploys on
-push to `main` via **GitHub Actions**.
+Shibka runs as a single **Cloudflare Worker**: `worker/` serves the JSON API
+and Cloudflare's static-asset store serves the game itself (see
+`wrangler.jsonc`). Data lives in **Neon Postgres**, unchanged. It auto-deploys
+on push to `main` via **GitHub Actions**.
 
 ```
-GitHub push to main ─▶ Actions (SSH) ─▶ EC2: deploy/deploy.sh
-                                          (git pull + docker compose build + up + /healthz)
-Browser ─▶ Caddy :443 (TLS) ─▶ shibka:3000 (container, proxy_net) ─▶ Neon Postgres
+GitHub push to main ─▶ Actions: npm ci, npm test, npm run migrate, wrangler deploy
+Browser ─▶ Cloudflare edge (Worker + static assets, automatic TLS) ─▶ Neon Postgres
 ```
 
-This mirrors the existing **`schedule`** app: apps live in `~/apps/<app>/`, are
-built natively on the arm64 box (no registry/QEMU), `expose` their port (not
-publish), and join the externally-managed **`proxy_net`** network that Caddy
-routes over by container name.
+Neon project `Shibka` (`red-bread-86298984`, `aws-us-east-1`, org
+`org-billowing-wildflower-14648462`) — same database this app has always used;
+this migration changes nothing about the data or its connection details.
 
-Box facts: instance `i-0cec00e5605d54aa2` · `54.82.52.150` · user `ec2-user` ·
-Amazon Linux 2023 arm64 · Docker 25 + compose. Neon project `Shibka`
-(`red-bread-86298984`, `aws-us-east-1`, org `org-billowing-wildflower-14648462`).
+*(Shibka was previously a Docker container on an EC2 box behind a shared Caddy
+proxy, and before that a static GitHub Pages site — see git history for those
+runbooks.)*
 
 ---
 
-## 0. Local development
+## 1. One-time setup
 
-You don't need EC2 or Neon to develop locally — just Docker.
-
-```bash
-docker compose up -d db          # local Postgres
-cd server && npm install
-DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka \
-  PGSSL=disable SESSION_SECRET=dev-secret npm run migrate
-DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka \
-  PGSSL=disable SESSION_SECRET=dev-secret npm run dev   # http://localhost:3000
-# ...or the whole stack in Docker:  docker compose --profile full up
-```
-
-`PGSSL=disable` is only for the local non-TLS Postgres. Neon uses full-verify TLS.
-
----
-
-## 1. One-time box setup
-
-SSH in: `ssh -i ~/.ssh/avegancafe.pem ec2-user@54.82.52.150`
-
-### a. Clone the repo
-The `shibka` repo is public, so the box clones it over HTTPS (no key needed).
-```bash
-mkdir -p ~/apps && cd ~/apps
-git clone https://github.com/avegancafe/shibka.git
-cd ~/apps/shibka
-```
-
-### b. Fill in the environment file
-```bash
-cp deploy/env.production.sample deploy/.env
-# DATABASE_URL — pooled Neon string (run locally where neonctl is logged in):
-#   npx neonctl connection-string --project-id red-bread-86298984 \
-#     --org-id org-billowing-wildflower-14648462 --pooled
-# SESSION_SECRET — generate on the box:
-openssl rand -hex 32
-# Edit deploy/.env with both values. (NODE_ENV/PORT are set in the compose file.)
-chmod 600 deploy/.env
-```
-The Neon schema is already applied; `deploy.sh`/the container re-run the
-idempotent migration on every deploy anyway.
-
-### c. Route the subdomain via the shared proxy (avegancafe_lb)
-The Caddy reverse proxy lives in its own repo, **avegancafe_lb**
-(github.com/avegancafe/avegancafe_lb), cloned at `~/apps/lb`. Each app's site
-block is one file under `sites/<domain>.caddy`. Shibka's
-(`sites/shibka.kyleholzinger.dev.caddy`) mirrors this repo's `deploy/Caddyfile`
-and is already in place. To re-apply or change routing:
-```bash
-cd ~/apps/lb && git pull && ./deploy.sh   # git pull + up -d + validate + graceful reload
-```
-To wire it from scratch: add `deploy/Caddyfile`'s contents to the lb repo as
-`sites/shibka.kyleholzinger.dev.caddy`, push, then run the above on the box.
-
-### d. DNS
-Point `shibka.kyleholzinger.dev` at the box (same as `schedule`):
-an **A record → 54.82.52.150**. Caddy issues the TLS cert on first request once
-DNS resolves.
-
-### e. First deploy
-```bash
-cd ~/apps/shibka && ./deploy/deploy.sh
-```
-Then check: `curl -fsS https://shibka.kyleholzinger.dev/healthz` → `{"ok":true}`.
+1. **Cloudflare account.** Any account works to start — a Worker deploys to a
+   free `*.workers.dev` subdomain before any custom domain is wired up (§3).
+2. **Authenticate Wrangler**, either:
+   - `npx wrangler login` (opens a browser, stores a local OAuth token), or
+   - an API token — the same kind CI uses (§2). Export it locally as
+     `CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID`) and Wrangler picks it
+     up with no login step.
+3. **Set the two Worker secrets** (per-environment, stored by Cloudflare — not
+   in the repo):
+   ```bash
+   npx wrangler secret put SESSION_SECRET
+   npx wrangler secret put DATABASE_URL
+   ```
+   - `SESSION_SECRET` **must be the same value the EC2/Express deployment
+     used**, or every already-issued session cookie is invalidated and every
+     signed-in player is logged out. Pull it from wherever it was recorded
+     before that box gets decommissioned (§4).
+   - `DATABASE_URL` is the **same Neon pooled connection string** the old
+     deployment used — same database, same `users` table, **no data migration
+     needed**. Regenerate it if needed with:
+     ```bash
+     npx neonctl connection-string --project-id red-bread-86298984 \
+       --org-id org-billowing-wildflower-14648462 --pooled
+     ```
+4. **First deploy:** `npm run deploy` (runs `wrangler deploy`). This publishes
+   the Worker + static assets to `https://shibka.<your-subdomain>.workers.dev`.
+5. **Smoke test** on that `*.workers.dev` URL before touching the domain:
+   ```bash
+   curl -s https://shibka.<subdomain>.workers.dev/healthz   # -> {"ok":true}
+   ```
+   Then load the page and confirm signup/login work against the shared Neon
+   database.
 
 ---
 
-## 2. GitHub Actions setup
+## 2. GitHub secrets for CI
 
-The workflow (`.github/workflows/deploy.yml`) SSHes in on push to `main` and runs
-`deploy/deploy.sh`. Add these repo secrets
-(**Settings → Secrets and variables → Actions**):
+`.github/workflows/deploy.yml` runs the test suite, applies the migration, and
+deploys on every push to `main`. Add these repo secrets (**Settings → Secrets
+and variables → Actions**):
 
 | Secret | Value |
 |--------|-------|
-| `EC2_HOST` | `54.82.52.150` |
-| `EC2_USER` | `ec2-user` |
-| `EC2_SSH_KEY` | a private key whose public half is in `ec2-user`'s `~/.ssh/authorized_keys` on the box (you can reuse the `avegancafe` key, or add a dedicated CI key) |
-| `EC2_PORT` | *(optional)* SSH port, defaults to 22 |
+| `CLOUDFLARE_API_TOKEN` | A token scoped to this account with **Workers Scripts:Edit** permission (dashboard → My Profile → API Tokens → Create Token). |
+| `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account ID that owns the Worker (dashboard sidebar, or `wrangler whoami`). |
+| `DATABASE_URL` | The same Neon pooled connection string from §1 — used by `npm run migrate` in CI, immediately before the deploy step. |
 
-Push to `main` (or run the workflow manually). The job runs `deploy.sh` (git pull
-+ build + up + `/healthz` gate) and fails if the app doesn't come up healthy.
+The old `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_PORT` secrets are obsolete
+— delete them once the Cloudflare deploy is confirmed working (§4).
 
 ---
 
-## 3. Operations
+## 3. Domain cutover (point kyleholzinger.dev at Cloudflare)
 
-```bash
-docker ps --filter name=shibka
-docker logs -f shibka                      # app logs (also journald tag "shibka")
-docker compose -p shibka -f ~/apps/shibka/deploy/docker-compose.app.yml restart
-curl -fsS https://shibka.kyleholzinger.dev/healthz
-```
+`kyleholzinger.dev` currently uses **NS1** nameservers
+(`dns1-4.p08.nsone.net`). Cloudflare custom domains require the *zone* itself
+to live on Cloudflare, so this is a nameserver migration, not just a DNS
+record edit:
 
-**Rollback:** `cd ~/apps/shibka && ./deploy/deploy.sh <previous-sha>`.
+1. **Add the site** in the Cloudflare dashboard (Websites → Add a site — the
+   free plan is enough). Let Cloudflare **import the existing DNS records**:
+   this picks up the `A` record pointing `shibka.kyleholzinger.dev` at
+   `54.82.52.150`, so **the EC2 box keeps serving the domain unchanged** while
+   the rest of this move is in progress.
+2. **Switch nameservers at the registrar** to the two Cloudflare-assigned
+   ones, replacing the NS1 `dns1-4.p08.nsone.net` set.
+3. **Wait for the zone to activate** (Cloudflare emails you, and the dashboard
+   shows "Active" — usually minutes, occasionally longer for full DNS
+   propagation).
+4. **Only once the zone is active**, uncomment the `routes` block in
+   `wrangler.jsonc`:
+   ```jsonc
+   "routes": [{ "pattern": "shibka.kyleholzinger.dev", "custom_domain": true }]
+   ```
+   and redeploy (`npm run deploy`, or just push to `main`). Cloudflare now
+   takes over `shibka.kyleholzinger.dev` directly, with automatic TLS — no
+   Caddy, no Let's Encrypt renewal to manage.
 
-**The PWA stays always-fresh** (network-first service worker), so clients pick up
-new deploys automatically; `/api/*` is never cached (see `sw.js`).
+**Rollback:** comment the `routes` block back out and redeploy. The zone's `A`
+record still points `shibka.kyleholzinger.dev` at the EC2 box (imported in
+step 1 and never removed), so traffic falls straight back to the old
+container with no further DNS changes needed.
 
-## 4. Old-domain score bridge (TEMPORARY)
+---
 
-The game used to live at `https://avegancafe.github.io/shibka/` (GitHub Pages,
-since deleted). Browsers that played there still hold an **anonymous best** in
-`localStorage["shibka_best"]` on that origin. The bridge recovers it.
+## 4. Decommission checklist (once the Cloudflare cutover is verified stable)
 
-**How it works (no CORS, no backend change):** a tiny static page redeployed at
-the old origin reads `shibka_best` and redirects to
-`https://shibka.kyleholzinger.dev/#import_best=<n>&confirm=1` — handing the score
-off in a **URL fragment**, never a cross-origin request. The new site's inline
-reader (in `index.html`, above `js/scores.js`) stashes it under `shibka_import_best`
-(durably on the new origin now), and `scores.js` folds it into the offline queue
-via `record()` (GREATEST-idempotent — a lower import is dropped). It reaches the DB
-the same way any guest score does: when the player signs in, `auth.js`'s
-`flushScores()` posts it. A guest whose best was actually raised gets a one-time
-"claim it on the leaderboard" nudge.
+- Remove the `shibka` site block (`sites/shibka.kyleholzinger.dev.caddy`) from
+  the **avegancafe_lb** repo (the shared Caddy proxy config, `~/apps/lb` on
+  the box), then `git pull && ./deploy.sh` there so Caddy stops routing the
+  domain.
+- On the EC2 box, stop and remove the old `shibka` compose project (the
+  compose file and the rest of `deploy/` no longer exist in *this* repo as of
+  the Cloudflare migration — use whatever copy is still checked out on the
+  box, e.g. `docker compose -p shibka -f ~/apps/shibka/deploy/docker-compose.app.yml down`,
+  or `docker rm -f shibka` if that file is already gone).
+- Delete the obsolete GitHub secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`,
+  `EC2_PORT`.
 
-**Confirmed-migration round-trip (the `shibka_migrated` flag):** because the old
-origin can't see the new origin's storage, the new reader — when it sees
-`&confirm=1` — bounces **once** back to `…/avegancafe.github.io/shibka/#migrated=<n>`.
-The bridge sets a `localStorage["shibka_migrated"]` flag **only** when that
-confirmation arrives *and* its current `readBest()` is ≤ the confirmed `<n>` (so a
-tampered/low confirmation can't strand a higher real score — it re-migrates
-instead), then forwards the user to the new site. Once flagged, future visits show
-only the lightweight "moved" UI and never re-attempt the import. (We deliberately
-do **not** use the old `shibka_handoff_done` flag for this — it marked a mere
-*attempt*.) Net per-device flow on first migration: old → new (stash) → old (flag) →
-new (land); ~3–4s, one-time.
+### Old-domain score bridge (TEMPORARY — separate, later teardown)
 
-Bridge source lives at **`deploy/ghpages-bridge/index.html`** (it ships **no**
-service worker, and clears only Shibka's own SW/caches — scope `/shibka`, cache
-prefix `shibka-` — so it can't disturb other projects on the shared `github.io`
-origin). It **never deletes** `shibka_best` (re-handing-off the same value is
-idempotent), so even if the confirmation never completes, the score is safe and
-re-migrates on a later visit.
+Unrelated to the EC2 box: the old **GitHub Pages** origin
+(`https://avegancafe.github.io/shibka/`) still serves a tiny bridge page (the
+**`gh-pages`** branch — its source left this repo when `deploy/` was deleted in
+the Cloudflare migration; see `deploy/ghpages-bridge/index.html` in git
+history). It hands a returning browser's anonymous `shibka_best` to
+`shibka.kyleholzinger.dev` via a `#import_best=<n>` URL fragment, which the
+inline reader in `index.html` (marked `TEMPORARY`) stashes for `js/scores.js`.
+The Cloudflare move doesn't change any of this — it's origin-to-origin, no
+backend involved.
 
-**Deploy — ORDER MATTERS:**
-1. Ship the new-site half first: merge this work to `main` so the inline reader +
-   `scores.js` consumer are live on `shibka.kyleholzinger.dev` (normal EC2 deploy).
-2. Publish the bridge to a **`gh-pages` branch** (orphan; root = the bridge
-   `index.html`). Push `gh-pages` **before** touching repo Settings.
-3. In repo **Settings → Pages → Source = "Deploy from a branch", Branch =
-   `gh-pages` / `(root)`**, HTTPS enforced. (Flipping the toggle *before* the
-   branch exists silently won't build.) Keep Pages on "Deploy from a branch" so it
-   can't drift to an Actions workflow that runs on `main`.
-   *(The `gh-pages` branch never triggers the EC2 deploy — that's `push: [main]`.)*
+**Teardown (~6–12 months after the Pages→EC2 move, when the long tail dries
+up):** delete the `gh-pages` branch + set repo **Settings → Pages → Source =
+None**, then remove the new-site import code — the inline reader in
+`index.html`, the `IMPORT_KEY` consumer + `importInfo()` in `js/scores.js`, the
+import nudge in `js/auth.js`, and the `.account-import` CSS. All of it is
+commented **TEMPORARY**. Owner: Kyle.
 
-Verify: visit `https://avegancafe.github.io/shibka/` with a seeded `shibka_best`;
-it should land on the new site with the score in the header.
+---
 
-**Teardown (~6–12 months out, when the long tail dries up):** delete the
-`gh-pages` branch + set Settings → Pages → Source = **None**, then remove the
-new-site import code (the inline reader in `index.html`, the `IMPORT_KEY`
-consumer + `importInfo()` in `js/scores.js`, the import nudge in `js/auth.js`, and
-the `.account-import` CSS). All of it is commented **TEMPORARY**. Owner: Kyle.
+## 5. Operations
+
+- **Migrations run in CI now**, right before every deploy (`npm run migrate`
+  against `secrets.DATABASE_URL` — see `.github/workflows/deploy.yml`).
+  `db/schema.sql` must stay idempotent (every statement `IF NOT EXISTS`),
+  since it reapplies on every push to `main`.
+- **Logs:** `npx wrangler tail` streams live requests and `console.error`
+  output from the deployed Worker.
+- **Bad deploy:** `npx wrangler rollback` reverts to the previous deployed
+  version instantly (`wrangler deployments list` to pick a specific one, then
+  `wrangler rollback <id>`).
+- **CPU limit / scrypt:** password hashing (scrypt) is CPU-heavy — roughly
+  50–100ms per hash — and every signup, login (even a *failed* one; the dummy
+  hash keeps timing constant), and password change pays that cost. The
+  **Workers Free plan caps CPU time at 10ms per request**, which a single
+  scrypt call blows past on its own, so `/api/login` and `/api/signup` can get
+  killed mid-request under load. The **Workers Paid plan ($5/mo, covers every
+  Worker on the account)** raises the CPU limit and is recommended before
+  relying on this in production.
+- **Rate limiting:** the in-worker limiter (`worker/index.js`) is per-isolate
+  and best-effort only — it slows down a single hot isolate, **not** a real
+  defense against abuse. Add a **Cloudflare WAF rate-limiting rule** for
+  `/api/login` and `/api/signup` (Security → WAF → Rate limiting rules) for
+  actual protection.

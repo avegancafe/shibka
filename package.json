@@ -1,0 +1,20 @@
+{
+  "name": "shibka",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --persist-to \"${TMPDIR:-/tmp}/shibka-wrangler-state\"",
+    "deploy": "wrangler deploy",
+    "migrate": "node db/migrate.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.19.1",
+    "pg": "^8.13.1",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.116.0"
+  }
+}

@@ -5,17 +5,16 @@ pups into the bin; two of the same breed merge into the next breed up. The goal
 (the "watermelon") is the **Shiba Inu**.
 
 - **Repo:** github.com/avegancafe/shibka (GitHub account `avegancafe`)
-- **Live:** https://shibka.kyleholzinger.dev — a **Docker container** on the
-  shared EC2 box (`avegancafe_bot_nemoclaw`, arm64, `54.82.52.150`) behind a
-  shared **Caddy** reverse proxy (auto Let's Encrypt TLS) on the `proxy_net`
-  network. The proxy is its own repo, **avegancafe_lb** (`~/apps/lb` on the box);
-  Shibka's site block is `sites/shibka.kyleholzinger.dev.caddy` there, mirroring
-  `deploy/Caddyfile`. Auto-deploys on push to `main` via GitHub Actions → SSH →
-  `deploy/deploy.sh`. *(Was GitHub Pages; see git history.)*
+- **Live:** https://shibka.kyleholzinger.dev — a **Cloudflare Worker** (`worker/`)
+  serving the JSON API, with the game itself served as Cloudflare static assets
+  (see `wrangler.jsonc`). Auto-deploys on push to `main` via GitHub Actions →
+  `wrangler deploy`. *(Was GitHub Pages, then a Docker container on EC2 behind a
+  shared Caddy proxy; see git history.)*
 - **Stack:** the **game** is still vanilla — **no build step, no framework** for
-  gameplay (HTML + CSS + vanilla JS + vendored physics; edit and reload). There is
-  now a small **Express + Postgres** backend in `server/` for accounts, best-score
-  sync, and the leaderboard (`npm` only for the server). Data lives in **Neon
+  gameplay (HTML + CSS + vanilla JS + vendored physics; edit and reload). The
+  backend is now a **Cloudflare Worker** in `worker/` for accounts, best-score
+  sync, and the leaderboard, talking to Postgres via the **Neon serverless HTTP
+  driver** (`npm` only for the worker + tooling). Data still lives in **Neon
   Postgres** (project `Shibka`, pooled connection). See `DEPLOY.md`.
 
 ## Issue tracking (beads)
@@ -67,10 +66,13 @@ conventions, the `shibka-`/`.N` ID structure, and the setup checks.
 | `vendor/matter.min.js` | matter-js 0.20.0, vendored. Don't swap for a CDN. |
 | `manifest.webmanifest` | PWA manifest (standalone, Shiba icons, theme colors). |
 | `sw.js` | Service worker — network-first + offline precache. **Skips `/api/*` + `/healthz`** (never cached — a stale `/api/me` would show the wrong login state). |
-| `server/` | Express + Postgres backend: `server.js` (routes, scrypt passwords, HMAC-signed cookie sessions), `db.js` (pg pool), `schema.sql` + `migrate.js`, `.env.example`, `package.json`. |
-| `docker-compose.yml` | Local-dev Postgres (always-on `db` service) + an optional full-stack `app` service (`--profile full`). Prod uses `deploy/` instead. |
-| `deploy/` | Production (EC2 box): `Dockerfile` (arm64 native build), `docker-compose.app.yml` (the `shibka` container on `proxy_net`), `Caddyfile` (the `shibka.kyleholzinger.dev` site block for the shared Caddy proxy), `deploy.sh` (git pull + build + up + `/healthz`), `env.production.sample`. Mirrors the box's existing `schedule` app. |
-| `.github/workflows/deploy.yml` | CI deploy: on push to `main`, SSH to the box (`ec2-user@54.82.52.150`) → `~/apps/shibka/deploy/deploy.sh`. |
+| `worker/` | The Cloudflare Worker (API): `index.js` (router — all `/api/*` + `/healthz`, plus `HTML_ALIASES`, which serves `/index.html` + `/leaderboard.html` as 200s instead of the asset router's 307s, because `sw.js` precaches those exact URLs), `auth.js` (scrypt passwords, HMAC-signed session tokens), `db.js` (wraps `@neondatabase/serverless`, returns `{rows}` like `pg` did). |
+| `db/` | `schema.sql` (idempotent, same `users` table as before) + `migrate.js` (Node-only script, speaks the Postgres wire protocol via `pg`; runs in CI before every deploy, and locally against a Neon dev branch). |
+| `wrangler.jsonc` | Worker config: entrypoint, `nodejs_compat` (for `node:crypto`), the `assets` binding (repo root, `run_worker_first` limited to `/api/*`, `/healthz`, and the two `HTML_ALIASES` paths), and the commented-out custom-domain `routes` block (see `DEPLOY.md`). |
+| `_headers` | Security headers (CSP, Permissions-Policy, etc.) applied to static-asset responses by Cloudflare's asset router — mirrors what `worker/index.js` sets on every `/api` response. Consumed by Wrangler at upload time, not served itself. |
+| `.assetsignore` | Trims the uploaded static-asset set down to just the game (`worker/`, `db/`, `test/`, docs, tooling, etc. are excluded). |
+| `test/` | Vitest suite (`worker.spec.js`) that runs inside `workerd` via `@cloudflare/vitest-pool-workers` — asserts the ported scrypt/session code stays byte-compatible with the old Express server. `npm test` is the CI gate. |
+| `.github/workflows/deploy.yml` | CI deploy: on push to `main`, `npm ci` → `npm test` → `npm run migrate` (against Neon) → `wrangler deploy`. |
 | `assets/` | Generated PNGs: `favicon.png`, `favicon-32.png`, `icon-192/512/512-maskable`, `apple-touch-icon`, `social-preview.png`. All are the Shiba face / brand card. |
 
 ## The dog roster
@@ -156,7 +158,7 @@ The installed app is meant to be a **live copy of the latest deploy**.
   change the `ASSETS` precache list or want to force every client to evict old
   caches.** Day-to-day content changes propagate automatically via network-first —
   you do *not* need to bump for every edit, but bumping on a release is safe and
-  cheap. (Currently `v12`.)
+  cheap. (Currently `v17`.)
 - `index.html` also carries `?v=N` on the css/js links as a belt-and-suspenders
   HTTP-cache bust; less critical now that the SW is network-first.
 - **Home-screen icon caveat:** the OS snapshots the icon at install time. Updating
@@ -165,27 +167,38 @@ The installed app is meant to be a **live copy of the latest deploy**.
 
 ## Backend, accounts & persistence
 
-`server/` is an Express app that serves **both** the static game and a JSON API.
+`worker/index.js` is a Cloudflare Worker that serves the JSON API (the static
+game is served separately by Cloudflare's asset store — see `wrangler.jsonc`).
 - **Auth:** username + password (case-insensitive unique username). Passwords are
-  hashed with Node's built-in **scrypt** (no native deps). Session = an
-  **HMAC-signed token in an httpOnly cookie** (`SESSION_SECRET`), 30-day TTL —
-  stateless, no session table.
+  hashed with Node's built-in **scrypt** (`node:crypto` under `nodejs_compat` —
+  no native deps). Session = an **HMAC-signed token in an httpOnly cookie**
+  (`SESSION_SECRET`), 30-day TTL — stateless, no session table.
 - **Endpoints:** `POST /api/signup|login|logout`, `GET /api/me` (200 `{user:null}`
   when signed out — *not* 401, so anonymous loads don't log a console error),
   `PATCH /api/profile` (display name and/or password — password change requires
   the current one), `POST /api/score` (best = `GREATEST`), `GET /api/leaderboard`
   (top-N + the caller's rank). `GET /healthz` checks DB connectivity.
-- **DB:** one `users` table (`schema.sql`); best score lives on the user row, the
-  leaderboard is an `ORDER BY best_score DESC`. **`pg` returns `BIGINT` ids as
-  strings** — the session `uid` is coerced to a number (gotcha we hit).
-- **Required env:** `DATABASE_URL` (Neon pooled string), `SESSION_SECRET`
-  (`openssl rand -hex 32`), `NODE_ENV=production` (so cookies are `Secure`). See
-  `server/.env.example`. **Never commit a real `.env`** (gitignored).
-- **DB TLS (`db.js`):** defaults to **full certificate verification** (works with
-  Neon's publicly-trusted cert). `PGSSL=disable` for local non-TLS Postgres,
-  `PGSSL=no-verify` for self-signed. It strips `sslmode`/`channel_binding` from
-  the URL so node-postgres doesn't emit its sslmode deprecation warning — TLS is
-  governed by the `ssl` option, not the URL.
+- **DB:** one `users` table (`db/schema.sql`); best score lives on the user row,
+  the leaderboard is an `ORDER BY best_score DESC`. Queries go through
+  `worker/db.js`, a thin wrapper over **`@neondatabase/serverless`** (Neon's
+  SQL-over-HTTP driver — no long-lived pool in a Worker) that returns `{rows}`
+  just like `pg` did. **Ids still come back as strings** (the same
+  `BIGINT`-as-string gotcha as before) — the session `uid` is coerced to a
+  number (`Number(uid)`).
+- **Required env:** `DATABASE_URL` (Neon pooled string) and `SESSION_SECRET`
+  (`openssl rand -hex 32`) as **Wrangler secrets** in production
+  (`wrangler secret put ...`, see `DEPLOY.md`) and in a local `.dev.vars` file
+  (copy `.dev.vars.example`, gitignored) for `wrangler dev`. There's no
+  `NODE_ENV` anymore — the session cookie's `Secure` attribute is derived from
+  the request hostname instead (off for `localhost`/`127.0.0.1`, on everywhere
+  else). **Never commit a real `.dev.vars`.**
+- **DB TLS:** the Worker itself has no TLS knobs — `@neondatabase/serverless`
+  talks HTTPS to Neon's SQL-over-HTTP endpoint and handles that internally. The
+  old `PGSSL`/`sslmode` handling survives only in `db/migrate.js`, which still
+  speaks the raw Postgres wire protocol via `pg` (defaults to full certificate
+  verification; `PGSSL=disable`/`no-verify` for local/self-signed Postgres) and
+  strips `sslmode`/`channel_binding` from the URL so `pg` doesn't emit its
+  deprecation warning.
 
 ## Local development
 
@@ -193,37 +206,42 @@ The **game alone** can be served statically (`python3 -m http.server 8000`) if
 you're only touching gameplay/CSS — the account UI just shows logged-out and the
 leaderboard reads "unavailable". For anything touching the **backend** (accounts,
 best-score sync, the leaderboard + its search/pagination) you need Postgres, and
-the easiest way is **docker compose** (`docker-compose.yml` is local-dev only;
-prod uses `deploy/` + Neon).
+the easiest way is a **Neon dev branch** + `wrangler dev`.
 
-### Testing locally with docker compose
-
-Two ways to bring up a local DB-backed stack:
+### Testing locally with wrangler dev
 
 ```bash
-# A) DB in Docker, Node on your host (fast iteration — recommended)
-docker compose up -d db            # just Postgres: the always-on `db` service on :5432
-cd server && npm install
-export DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka PGSSL=disable SESSION_SECRET=dev-secret
-npm run migrate && npm run dev     # serves the game + /api on http://localhost:3000
-
-# B) whole stack in Docker (one command, no host Node)
-docker compose --profile full up   # Postgres + the Node `app` service together
+npm install
+cp .dev.vars.example .dev.vars   # gitignored — never commit the real one
+# Edit .dev.vars: DATABASE_URL -> a Neon DEV BRANCH (Neon console -> Branches ->
+# New branch off the Shibka project). A branch is an instant copy of prod's
+# schema/data, scale-to-zero, free tier. SESSION_SECRET can be anything locally.
+npm run migrate   # applies db/schema.sql to that branch (idempotent)
+npm run dev       # wrangler dev -- serves the game + /api on http://localhost:8787
 ```
 
-Confirm it's healthy: `curl -s localhost:3000/healthz` → `{"ok":true}`. Creds are
-`shibka:shibka` / db `shibka` (see `docker-compose.yml`); `schema.sql` + `migrate.js`
-are idempotent so re-running migrate is safe. Tear down with `docker compose down`
-(add `-v` to also drop the `shibka_pgdata` volume for a clean DB).
+Confirm it's healthy: `curl -s localhost:8787/healthz` → `{"ok":true}`.
+`db/schema.sql` + `db/migrate.js` are idempotent, so re-running migrate is safe.
+
+> **Why `npm run dev` passes `--persist-to`:** Wrangler's asset watcher watches
+> `assets.directory` (here the repo root) *without* honoring `.assetsignore`, so
+> its own `.wrangler/state` writes retrigger a reload forever and the server
+> never answers a single request (measured: 600+ reloads, zero responses). The
+> `dev` script therefore keeps local state in `$TMPDIR/shibka-wrangler-state`,
+> outside the watched tree. If you run `wrangler dev` by hand, pass
+> `--persist-to <a directory outside the repo>` yourself. (`node_modules/` is
+> watched too, so an in-repo persist dir doesn't work either. Unavoidable
+> leftover: git operations and `.wrangler/tmp` writes still each trigger one
+> harmless reload.)
 
 > **DB-backed QA needs this.** The account widget, the best-score `POST`, and the
 > whole leaderboard (top-5 strip, the desktop board, and the `/leaderboard`
-> search/pagination) all hit `/api/*`, which requires Postgres. With no DB those
-> endpoints `500`, so spin up the compose `db` before QA-ing those flows — and note
-> `/api/me` only returns `200 {user:null}` when the backend is actually up. If
-> Docker isn't available you can still QA the **layout/markup** statically, but
-> verify the **data flow** against a real DB (compose locally, or against the
-> deployed site).
+> search/pagination) all hit `/api/*`, which requires Postgres. With no
+> `DATABASE_URL` those endpoints `500`, so point `.dev.vars` at a real (dev-branch)
+> database before QA-ing those flows — and note `/api/me` only returns
+> `200 {user:null}` when the backend is actually reachable. You can still QA the
+> **layout/markup** statically with no database, but verify the **data flow**
+> against a real DB (a dev branch locally, or the deployed site).
 
 Service workers also run on `localhost` (a secure context). **Gotcha:** when
 iterating, an old SW can serve a stale cached file. If a change isn't showing,
@@ -244,8 +262,9 @@ and assert via `window.__SHIBKA` (deterministic merge test, game-over, restart),
 plus screenshots and a console-error check. Always verify both the wide and narrow
 layouts when touching CSS/`fitCanvas`.
 
-For **account/leaderboard** changes, serve via the **Node server** (`:3000`, with
-the docker-compose DB up) rather than `python http.server`, then exercise:
+For **account/leaderboard** changes, serve via **`wrangler dev`** (`:8787`, with
+`.dev.vars` pointed at a Neon dev branch) rather than `python http.server`, then
+exercise:
 signup → the account widget flips to "Playing as …"; a real game-over `POST`s the
 score and the leaderboard updates; login reconciles a higher local best up; the
 profile modal renames/updates the password. The Playwright MCP needs Google Chrome
@@ -254,13 +273,12 @@ bar — that's why `/api/me` returns `200 {user:null}` instead of 401.
 
 ## Deploying
 
-Push to `main`; the **GitHub Actions** workflow SSHes into the box and runs
-`deploy/deploy.sh`, which does `git pull` + `docker compose build` (native arm64)
-+ `up -d` + a `/healthz` gate (the container also runs the idempotent
-`migrate.js` on boot). Full one-time box setup (clone to `~/apps/shibka`, the
-Caddy site wiring on `proxy_net`, `deploy/.env`, DNS, repo secrets) is in
-**`DEPLOY.md`**. Schema changes ship by editing `server/schema.sql` (keep every
-statement idempotent — it runs on every deploy). Then verify live:
+Push to `main`; the **GitHub Actions** workflow runs the test suite
+(`npm test`), applies the Neon migration (`npm run migrate`), then deploys with
+`wrangler deploy` (via `cloudflare/wrangler-action`). One-time Cloudflare setup
+(secrets, the `*.workers.dev` smoke test, the custom-domain cutover, repo
+secrets) is in **`DEPLOY.md`**. Schema changes ship by editing `db/schema.sql`
+(keep every statement idempotent — it runs on every deploy). Then verify live:
 
 ```bash
 until curl -s "https://shibka.kyleholzinger.dev/?cb=$(date +%s)" | grep -q "SOMETHING_YOU_CHANGED"; do sleep 5; done
