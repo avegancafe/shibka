@@ -1,0 +1,11 @@
+# Copy to .dev.vars for `wrangler dev` (gitignored — never commit the real one).
+# In production these are Worker secrets: wrangler secret put DATABASE_URL / SESSION_SECRET
+
+# Neon connection string — use a dev BRANCH of the Shibka project, not production.
+# Neon console -> Branches -> new branch -> Connection Details (pooled endpoint).
+DATABASE_URL=
+
+# Secret used to sign session cookies. Generate one with:  openssl rand -hex 32
+# Production must keep the SAME value the old Express server used, or every
+# already-issued session cookie is invalidated.
+SESSION_SECRET=dev-secret-change-me

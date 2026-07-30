@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shibka",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-06-01",
+  // node:crypto (scrypt, HMAC, timingSafeEqual) + node:buffer — the password and
+  // session formats are byte-compatible with the old Node server because of this.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "workers_dev": true,
+  "assets": {
+    // The repo root *is* the static game. `.assetsignore` trims everything that
+    // isn't (worker/, db/, test/, tooling, docs); `_headers` is consumed by
+    // Wrangler at upload time rather than served.
+    "directory": ".",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "single-page-application",
+    // Only the API (plus the two .html paths the Worker un-redirects — see
+    // HTML_ALIASES in worker/index.js) reaches the Worker; every other path is
+    // served straight from the asset store, so the game keeps its old
+    // zero-backend behavior.
+    "run_worker_first": ["/api/*", "/healthz", "/index.html", "/leaderboard.html"]
+  }
+  // Custom domain. Uncomment once the kyleholzinger.dev zone is moved to
+  // Cloudflare — until then the worker is reachable on its workers.dev subdomain.
+  // "routes": [{ "pattern": "shibka.kyleholzinger.dev", "custom_domain": true }]
+}
