@@ -447,6 +447,15 @@ body {
 @media (max-width: 859.98px) {
   .topbar > .account,
   .bottombar > .leaderboard { display: none; }
+
+  /* Lift "Next up" above the board so it's on screen while aiming. The
+     bottombar dissolves into .app's column so its children can be reordered
+     around .play-wrap; the desktop right rail is untouched. */
+  .bottombar { display: contents; }
+  .topbar { order: 0; }
+  .next { order: 1; }
+  .play-wrap { order: 2; }
+  .bottombar > :not(.next) { order: 3; }
 }
 
 /* ---- leaderboard ------------------------------------------------------- */
