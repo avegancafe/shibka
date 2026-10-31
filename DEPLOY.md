@@ -74,36 +74,30 @@ The old `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_PORT` secrets are obsolete
 
 ---
 
-## 3. Domain cutover (point kyleholzinger.dev at Cloudflare)
+## 3. Domain cutover
 
-`kyleholzinger.dev` currently uses **NS1** nameservers
-(`dns1-4.p08.nsone.net`). Cloudflare custom domains require the *zone* itself
-to live on Cloudflare, so this is a nameserver migration, not just a DNS
-record edit:
+The `kyleholzinger.dev` zone is already on Cloudflare (nameservers
+`felicity` / `paige.ns.cloudflare.com`), and `wrangler.jsonc` already declares
+`shibka.kyleholzinger.dev` as a Worker custom domain. What's left:
 
-1. **Add the site** in the Cloudflare dashboard (Websites → Add a site — the
-   free plan is enough). Let Cloudflare **import the existing DNS records**:
-   this picks up the `A` record pointing `shibka.kyleholzinger.dev` at
-   `54.82.52.150`, so **the EC2 box keeps serving the domain unchanged** while
-   the rest of this move is in progress.
-2. **Switch nameservers at the registrar** to the two Cloudflare-assigned
-   ones, replacing the NS1 `dns1-4.p08.nsone.net` set.
-3. **Wait for the zone to activate** (Cloudflare emails you, and the dashboard
-   shows "Active" — usually minutes, occasionally longer for full DNS
-   propagation).
-4. **Only once the zone is active**, uncomment the `routes` block in
-   `wrangler.jsonc`:
-   ```jsonc
-   "routes": [{ "pattern": "shibka.kyleholzinger.dev", "custom_domain": true }]
+1. **Delete the old record.** In the dashboard, go to **kyleholzinger.dev → DNS →
+   Records** and delete the `A` record `shibka → 54.82.52.150` (the EC2 box).
+   A custom domain can't be created on a hostname that still has a manually
+   managed record, and CI's non-interactive deploy fails rather than
+   overwriting it.
+2. **Deploy** by pushing to `main` (or running `npm run deploy` locally). Wrangler
+   attaches the custom domain; Cloudflare creates a read-only proxied DNS
+   record and issues the certificate itself — no Caddy, no Let's Encrypt.
+3. **Verify:**
+   ```bash
+   curl -s https://shibka.kyleholzinger.dev/healthz   # -> {"ok":true}
    ```
-   and redeploy (`npm run deploy`, or just push to `main`). Cloudflare now
-   takes over `shibka.kyleholzinger.dev` directly, with automatic TLS — no
-   Caddy, no Let's Encrypt renewal to manage.
+   then log in with an account created **before** the move, to prove the
+   scrypt hashes and `SESSION_SECRET` carried over.
 
-**Rollback:** comment the `routes` block back out and redeploy. The zone's `A`
-record still points `shibka.kyleholzinger.dev` at the EC2 box (imported in
-step 1 and never removed), so traffic falls straight back to the old
-container with no further DNS changes needed.
+**Rollback:** remove the custom domain (Worker → Settings → Domains & Routes,
+or drop `routes` from `wrangler.jsonc` and redeploy), then re-create the `A`
+record pointing at the EC2 box — while it still exists.
 
 ---
 

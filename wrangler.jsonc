@@ -21,8 +21,10 @@
     // served straight from the asset store, so the game keeps its old
     // zero-backend behavior.
     "run_worker_first": ["/api/*", "/healthz", "/index.html", "/leaderboard.html"]
-  }
-  // Custom domain. Uncomment once the kyleholzinger.dev zone is moved to
-  // Cloudflare — until then the worker is reachable on its workers.dev subdomain.
-  // "routes": [{ "pattern": "shibka.kyleholzinger.dev", "custom_domain": true }]
+  },
+  // Custom domain: the Worker is the origin, and Cloudflare creates the DNS
+  // record and certificate. The kyleholzinger.dev zone already lives on
+  // Cloudflare; the old `shibka` A record (EC2) must be deleted first — see
+  // DEPLOY.md §3.
+  "routes": [{ "pattern": "shibka.kyleholzinger.dev", "custom_domain": true }]
 }
