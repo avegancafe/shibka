@@ -8,14 +8,15 @@
 node_modules/
 npm-debug.log*
 yarn-error.log*
-package-lock.json
-# ...but DO track the server lockfile — `npm ci` in CI/EC2 requires it.
-!server/package-lock.json
+
+# Cloudflare Workers local state
+.wrangler/
 
 # Secrets — never commit real env files (templates like *.env.example are fine)
 .env
 *.env
 !*.env.example
+.dev.vars
 
 # Editor
 .vscode/

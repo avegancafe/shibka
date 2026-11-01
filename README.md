@@ -12,35 +12,31 @@ tiny **Chihuahua** all the way to the smug, meme-worthy **Shiba Inu**.
 ## Run locally
 
 The **game** is still a plain static site (vendored physics, procedural art, no
-build step). The accounts + leaderboard are served by a small **Express +
-Postgres** backend in `server/`. The easiest way to run the whole thing is Docker:
+build step). The accounts + leaderboard are served by a small **Cloudflare
+Worker** in `worker/`, backed by Neon Postgres. Run the whole thing with
+[Wrangler](https://developers.cloudflare.com/workers/wrangler/):
 
 ```bash
-docker compose up -d db          # local Postgres
-cd server && npm install
-DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka \
-  PGSSL=disable SESSION_SECRET=dev-secret npm run migrate
-DATABASE_URL=postgres://shibka:shibka@localhost:5432/shibka \
-  PGSSL=disable SESSION_SECRET=dev-secret npm run dev
-# open http://localhost:3000
+npm install
+cp .dev.vars.example .dev.vars   # then point DATABASE_URL at a Neon dev branch
+npm run migrate                  # applies db/schema.sql
+npm run dev                      # open http://localhost:8787
 ```
-
-Or run the entire stack (Postgres + Node) in Docker: `docker compose --profile full up`.
 
 The **gameplay itself runs fully offline** — `matter-js` is vendored in `vendor/`,
 dog faces are drawn procedurally on a canvas, and only the system font stack is
 used. The account/leaderboard layer is a progressive enhancement: when there's no
 network (or no backend), you simply play as a guest with a `localStorage` best.
 
-See **[DEPLOY.md](DEPLOY.md)** for the full local-dev and production (EC2 + Neon +
-GitHub Actions) setup.
+See **[DEPLOY.md](DEPLOY.md)** for the full production (Cloudflare Workers +
+Neon + GitHub Actions) deploy runbook.
 
 ## Install it (offline-ready PWA)
 
 Shibka is a Progressive Web App, so you can keep it on your phone and play with
 no connection:
 
-1. Open <https://avegancafe.github.io/shibka/> in your phone's browser.
+1. Open <https://shibka.kyleholzinger.dev> in your phone's browser.
 2. **iOS (Safari):** Share → **Add to Home Screen**. **Android (Chrome):** menu →
    **Install app** / **Add to Home screen**.
 3. Launch it from the home-screen icon — it opens full-screen (no browser chrome)
@@ -91,11 +87,11 @@ js/dogs.js             breed data (LEVELS) + parametric drawDog / offscreen spri
 js/game.js             matter.js setup, input, drop & merge logic, scoring, test hooks
 js/auth.js             account UI + best-score sync + leaderboard (progressive enhancement)
 vendor/matter.min.js   matter-js 0.20.0 (vendored)
-server/                Express + Postgres backend (auth, score, leaderboard) + schema/migrate
-docker-compose.yml     local Postgres (+ optional full stack)
-deploy/                systemd unit + nginx config for EC2
-.github/workflows/     GitHub Actions deploy to EC2
-DEPLOY.md              local-dev + production runbook
+worker/                Cloudflare Worker: the JSON API (auth, score, leaderboard)
+db/                    schema.sql + migrate.js (Postgres schema, applied via Neon)
+wrangler.jsonc         Cloudflare Workers config (Worker + static assets)
+.github/workflows/     GitHub Actions: test, migrate, deploy to Cloudflare
+DEPLOY.md              production deploy runbook (Cloudflare + Neon + GitHub Actions)
 ```
 
 ## Credits

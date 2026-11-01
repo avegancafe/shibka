@@ -1,0 +1,26 @@
+# Files under the repo root that must NOT be uploaded as static assets.
+# The served set is exactly the game: index.html, leaderboard.html, css/, js/,
+# vendor/, assets/, manifest.webmanifest, sw.js. (`_headers` is consumed by
+# Wrangler at upload time and is never served either.)
+node_modules
+.git
+.github
+.claude
+.agents
+.beads
+.wrangler
+worker
+db
+test
+server
+*.md
+package.json
+package-lock.json
+wrangler.jsonc
+vitest.config.*
+.gitignore
+.dockerignore
+.dev.vars*
+docker-compose.yml
+skills-lock.json
+.assetsignore
